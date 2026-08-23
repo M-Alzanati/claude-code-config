@@ -3,6 +3,33 @@
 Global Claude Code configuration — settings, hooks, statusline, skills —
 versioned so a new machine reproduces the setup.
 
+## The idea
+
+A rule written in prose gets ignored. A rule wired into a hook doesn't. Most of
+what's here is some instruction that kept getting dropped, converted into
+something mechanical:
+
+- **The agent never commits — you review first.** In `PRACTICES.md`, and the
+  reason the installer wires a pre-commit hook instead of trusting good intent.
+- **The output contract is injected twice** — in full at session start, and as a
+  short recall on *every* prompt. By mid-session the session-start copy is 100k
+  tokens behind what you just typed, and instruction-following decays with
+  distance. Restating it at close range is the fix.
+- **The config validates itself.** `check.sh` runs on every commit through
+  `.githooks/pre-commit`, so a broken `settings.json`, a hook pointing at a file
+  that doesn't exist, or a credential in a tracked file can't land.
+- **`.gitignore` is deny-by-default.** `~/.claude` holds OAuth tokens, every
+  conversation transcript, and your prompt history. An allowlist means a file you
+  forget stays untracked instead of leaking. That's backwards from normal
+  dotfiles, deliberately.
+- **The installer merges, never clobbers.** It backs up first, and the repo wins
+  only on shared keys — machine-local settings survive. Safe to re-run.
+- **The statusline reads the harness's own numbers,** not an estimate, so there's
+  nothing to drift out of sync when context accounting changes.
+
+None of this is clever. It's the difference between telling an agent what you
+want and arranging things so the wrong outcome can't happen quietly.
+
 ## Install
 
 Claude Code creates `~/.claude` on first run, so add the remote to the directory
