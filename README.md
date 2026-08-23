@@ -1,5 +1,7 @@
 # Claude Code config
 
+[![check](https://github.com/M-Alzanati/claude-code-config/actions/workflows/check.yml/badge.svg)](https://github.com/M-Alzanati/claude-code-config/actions/workflows/check.yml)
+
 Global Claude Code configuration — settings, hooks, statusline, skills —
 versioned so a new machine reproduces the setup.
 
@@ -101,6 +103,9 @@ Confirms `settings.json` parses, every hook command points at a file that exists
 the scripts run, the sensitive paths are still ignored, and no key material sits
 in a tracked file. It also runs on every commit through `.githooks/pre-commit`,
 so a broken config can't be committed. `git commit --no-verify` bypasses it.
+
+CI runs the same script plus an installer dry-run on Ubuntu and macOS, so the
+config is validated somewhere other than the machine it was written on.
 
 `.gitignore` is deny-by-default: `*`, then explicit `!` unignores. A file you
 forget stays untracked instead of leaking. **Add new config to the allowlist

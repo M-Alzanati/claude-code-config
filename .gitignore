@@ -27,3 +27,5 @@ skills/**
 !PRACTICES.md
 !hooks/output-reminder.sh
 !LICENSE
+!.github/
+!.github/**

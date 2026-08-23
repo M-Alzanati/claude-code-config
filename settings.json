@@ -5,6 +5,7 @@
     "MAX_THINKING_TOKENS": "10000",
     "COMPACT_THRESHOLD": "50"
   },
+  "includeCoAuthoredBy": false,
   "model": "opus",
   "hooks": {
     "PreToolUse": [
@@ -107,6 +108,5 @@
   },
   "outputStyle": "concise",
   "effortLevel": "xhigh",
-  "theme": "dark-daltonized",
-  "includeCoAuthoredBy": false
+  "theme": "dark-daltonized"
 }
