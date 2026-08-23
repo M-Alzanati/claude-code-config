@@ -1,0 +1,9 @@
+#!/bin/sh
+# Repo-local pre-commit. Chains the global hook (ECC secret scanner) and then
+# validates this config, so a broken settings.json can never be committed.
+# Skip once with: git commit --no-verify
+g=$(git config --global core.hooksPath 2>/dev/null)
+if [ -n "$g" ] && [ -x "$g/pre-commit" ]; then
+    "$g/pre-commit" || exit 1
+fi
+exec "$(git rev-parse --show-toplevel)/check.sh"

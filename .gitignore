@@ -1,0 +1,29 @@
+# Deny by default. This tree also holds OAuth credentials, full conversation
+# transcripts (projects/), prompt history, and a 1.3G plugin cache — none of
+# which belong in a repo. Add new config explicitly below.
+*
+
+!.gitignore
+!README.md
+!CLAUDE.md
+!RTK.md
+!statusline.sh
+!settings.json
+!hooks/
+!hooks/**
+# Skills: allowlist individually. Most under skills/ are third-party with no
+# license recorded, and this repo is meant to be publishable — vendoring
+# someone else's unlicensed work is not ours to redistribute.
+!skills/
+skills/**
+!skills/ui-styling/
+!skills/ui-styling/**
+!templates/
+!templates/**
+!install.sh
+!check.sh
+!.githooks/
+!.githooks/**
+!PRACTICES.md
+!hooks/output-reminder.sh
+!LICENSE
