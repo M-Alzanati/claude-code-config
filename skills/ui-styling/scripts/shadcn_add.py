@@ -8,10 +8,19 @@ Wraps shadcn CLI for programmatic component installation.
 
 import argparse
 import json
+import re
 import subprocess
 import sys
 from pathlib import Path
 from typing import List, Optional
+
+
+_SEMVER_RE = re.compile(
+    r"(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)"
+    r"(?:-(?:0|[1-9][0-9]*|[0-9A-Za-z-]*[A-Za-z-][0-9A-Za-z-]*)"
+    r"(?:\.(?:0|[1-9][0-9]*|[0-9A-Za-z-]*[A-Za-z-][0-9A-Za-z-]*))*)?"
+    r"(?:\+[0-9A-Za-z-]+(?:\.[0-9A-Za-z-]+)*)?"
+)
 
 
 class ShadcnInstaller:
@@ -70,11 +79,14 @@ class ShadcnInstaller:
         if pkg_json.exists():
             try:
                 pkg = json.loads(pkg_json.read_text())
+                if not isinstance(pkg, dict):
+                    pkg = {}
                 for section in ("dependencies", "devDependencies"):
-                    version = pkg.get(section, {}).get("shadcn")
-                    if version:
-                        return version.lstrip("^~>=<").split()[0]
-            except (json.JSONDecodeError, KeyError):
+                    packages = pkg.get(section, {})
+                    version = packages.get("shadcn") if isinstance(packages, dict) else None
+                    if isinstance(version, str) and _SEMVER_RE.fullmatch(version):
+                        return version
+            except (OSError, UnicodeError, json.JSONDecodeError, KeyError):
                 pass
         return "2.3.0"  # pinned fallback; update when newer stable release is needed
 

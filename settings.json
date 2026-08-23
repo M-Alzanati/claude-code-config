@@ -14,7 +14,7 @@
         "hooks": [
           {
             "type": "command",
-            "command": "~/.claude/hooks/rtk-rewrite.sh"
+            "command": "\"${CLAUDE_CONFIG_DIR:-$HOME/.claude}/hooks/rtk-rewrite.sh\""
           }
         ]
       },
@@ -23,7 +23,7 @@
         "hooks": [
           {
             "type": "command",
-            "command": "node ~/.claude/hooks/ecc/suggest-compact.js"
+            "command": "node \"${CLAUDE_CONFIG_DIR:-$HOME/.claude}/hooks/ecc/suggest-compact.js\""
           }
         ]
       }
@@ -34,7 +34,7 @@
         "hooks": [
           {
             "type": "command",
-            "command": "node ~/.claude/hooks/ecc/pre-compact.js"
+            "command": "node \"${CLAUDE_CONFIG_DIR:-$HOME/.claude}/hooks/ecc/pre-compact.js\""
           }
         ]
       }
@@ -45,15 +45,15 @@
         "hooks": [
           {
             "type": "command",
-            "command": "node ~/.claude/hooks/ecc/session-start.js"
+            "command": "node \"${CLAUDE_CONFIG_DIR:-$HOME/.claude}/hooks/ecc/session-start.js\""
           },
           {
             "type": "command",
-            "command": "~/.claude/hooks/suggest-claude-md.sh"
+            "command": "\"${CLAUDE_CONFIG_DIR:-$HOME/.claude}/hooks/suggest-claude-md.sh\""
           },
           {
             "type": "command",
-            "command": "~/.claude/hooks/output-style.sh"
+            "command": "\"${CLAUDE_CONFIG_DIR:-$HOME/.claude}/hooks/output-style.sh\""
           }
         ]
       }
@@ -64,7 +64,7 @@
         "hooks": [
           {
             "type": "command",
-            "command": "node ~/.claude/hooks/ecc/session-end.js",
+            "command": "node \"${CLAUDE_CONFIG_DIR:-$HOME/.claude}/hooks/ecc/session-end.js\"",
             "timeout": 10,
             "async": true
           }
@@ -77,7 +77,7 @@
         "hooks": [
           {
             "type": "command",
-            "command": "~/.claude/hooks/output-reminder.sh"
+            "command": "\"${CLAUDE_CONFIG_DIR:-$HOME/.claude}/hooks/output-reminder.sh\""
           }
         ]
       }
@@ -85,7 +85,7 @@
   },
   "statusLine": {
     "type": "command",
-    "command": "~/.claude/statusline.sh"
+    "command": "\"${CLAUDE_CONFIG_DIR:-$HOME/.claude}/statusline.sh\""
   },
   "enabledPlugins": {
     "understand-anything@understand-anything": true,

@@ -7,5 +7,6 @@ root=$(git rev-parse --show-toplevel 2>/dev/null) || exit 0
 [ -f "$root/CLAUDE.md" ] && exit 0
 [ -f "$root/.claude/no-claude-md" ] && exit 0
 
+config_dir=${CLAUDE_CONFIG_DIR:-$HOME/.claude}
 printf 'This project (%s) has no CLAUDE.md. Ask the user ONCE whether to create one from the template at %s/templates/CLAUDE.md, adapted to this project (its stack, test command, conventions). Do not ask twice in a session. If they decline, run: mkdir -p %s/.claude && touch %s/.claude/no-claude-md\n' \
-  "$root" "$HOME/.claude" "$root" "$root"
+  "$root" "$config_dir" "$root" "$root"
