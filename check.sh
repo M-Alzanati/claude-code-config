@@ -16,7 +16,9 @@ tmp=$(mktemp)
 jq -r '.hooks | to_entries[] | .value[] | .hooks[] | .command' settings.json 2>/dev/null |
     sed 's/^node //' | awk '{print $1}' > "$tmp"
 while IFS= read -r c; do
-    p=$(printf '%s' "$c" | sed "s|^~|$HOME|")
+    # Hook paths are written as ~/.claude/... but the config may live elsewhere
+    # (CLAUDE_CONFIG_DIR, or a CI checkout), so resolve them against $CFG.
+    p=$(printf '%s' "$c" | sed "s|^~/\.claude|$CFG|; s|^~|$HOME|")
     [ -f "$p" ]; chk $? "hook exists: $c"
 done < "$tmp"
 rm -f "$tmp"
