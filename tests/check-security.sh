@@ -146,6 +146,15 @@ EOF
     ' >/dev/null
 }
 
+test_output_policy_requires_evidence() {
+    for hook in hooks/output-style.sh hooks/output-reminder.sh; do
+        context=$("$ROOT/$hook" | jq -r '.hookSpecificOutput.additionalContext') || return 1
+        context=$(printf '%s' "$context" | tr '\n' ' ')
+        printf '%s\n' "$context" | grep -q 'fresh command output from this turn' || return 1
+        printf '%s\n' "$context" | grep -q 'unverified' || return 1
+    done
+}
+
 test_settings_use_portable_paths() {
     jq -e '
         [(.hooks | to_entries[] | .value[] | .hooks[] | .command), .statusLine.command]
@@ -486,7 +495,7 @@ test_ecc_replacement_repo_gets_new_key() {
     git -C "$project" init -q
     printf 'old\n' > "$project/old.js"
     git -C "$project" add old.js
-    git -C "$project" -c user.name=test -c user.email=test@example.invalid commit -qm old
+    git -C "$project" -c core.hooksPath=/dev/null -c user.name=test -c user.email=test@example.invalid commit -qm old
     printf '%s\n' '{"type":"tool_use","tool_name":"Edit","tool_input":{"file_path":"old.js"}}' > "$transcript"
     (cd "$project" && printf '%s\n' "{\"transcript_path\":\"$transcript\"}" |
         CLAUDE_CONFIG_DIR="$config" HOME="$home" node "$ROOT/hooks/ecc/session-end.js" >/dev/null 2>&1) || return 1
@@ -495,14 +504,14 @@ test_ecc_replacement_repo_gets_new_key() {
     [ -f "$old_session" ] || return 1
     printf 'stable\n' > "$project/stable.js"
     git -C "$project" add stable.js
-    git -C "$project" -c user.name=test -c user.email=test@example.invalid commit -qm stable
+    git -C "$project" -c core.hooksPath=/dev/null -c user.name=test -c user.email=test@example.invalid commit -qm stable
     stable_key=$(cd "$project" && CLAUDE_CONFIG_DIR="$config" node -e "process.stdout.write(require('$ROOT/hooks/ecc/lib/utils').getProjectKey())")
     [ "$old_key" = "$stable_key" ] || return 1
     rm -rf "$project/.git"
     git -C "$project" init -q
     printf 'new\n' > "$project/new.js"
     git -C "$project" add new.js
-    git -C "$project" -c user.name=test -c user.email=test@example.invalid commit -qm new
+    git -C "$project" -c core.hooksPath=/dev/null -c user.name=test -c user.email=test@example.invalid commit -qm new
     new_key=$(cd "$project" && CLAUDE_CONFIG_DIR="$config" node -e "process.stdout.write(require('$ROOT/hooks/ecc/lib/utils').getProjectKey())")
     [ "$old_key" != "$new_key" ] || return 1
     new_session="$config/sessions/$new_key-session.tmp"
@@ -519,6 +528,7 @@ run_test 'AWS access-key families are rejected' test_aws_token_families
 run_test 'binary-classified staged secrets are rejected' test_binary_staged_secret
 run_test 'Git scanner errors fail closed' test_scanner_error_fails_closed
 run_test 'RTK rewrites without approving' test_rtk_does_not_approve
+run_test 'output policy requires fresh evidence for status claims' test_output_policy_requires_evidence
 run_test 'settings commands use the portable config expression' test_settings_use_portable_paths
 run_test 'checker rejects nonportable command paths' test_checker_rejects_nonportable_path
 run_test 'checker rejects unsafe relative paths' test_checker_rejects_unsafe_relative_paths

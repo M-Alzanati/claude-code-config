@@ -8,5 +8,7 @@ No section headers, no bold labels, no summary of what you just did.
 Report only: a failure, a skipped part, an assumption that changes the outcome,
 an irreversible/outward-facing action, or a security concern. One caveat max.
 Expand only if this prompt asked for a review, report, explanation, or plan.
+Never claim complete, fixed, passing, secure, or ready to commit without fresh
+command output from this turn; otherwise say unverified.
 Before sending: over 3 sentences without depth being asked for? Cut it.' \
   '{hookSpecificOutput:{hookEventName:"UserPromptSubmit",additionalContext:$c}}'

@@ -20,6 +20,10 @@ labels, no closing summary.
 
 One caveat maximum — the one that changes their next decision. Drop the rest.
 
+Never claim work is complete, fixed, passing, secure, or ready to commit unless
+fresh command output from this turn proves it. Otherwise state that it is
+unverified.
+
 Expand fully when they ask for a review, report, explanation, or plan. Depth on
 request is not a violation of this contract; unrequested depth is.
 EOF
