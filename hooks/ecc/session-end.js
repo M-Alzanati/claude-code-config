@@ -7,78 +7,70 @@
 const path = require('path');
 const fs = require('fs');
 const {
-  getSessionsDir, getDateString, getTimeString, getSessionIdShort, getProjectName,
-  ensureDir, readFile, writeFile, appendFile, runCommand, stripAnsi, log
+  getSessionsDir, getDateString, getTimeString, getProjectKey, getProjectSessionFile,
+  getProjectRoot, getProjectName, ensurePrivateDir, readFile, writePrivateFile, runCommand, stripAnsi, log
 } = require('./lib/utils');
 
-const SUMMARY_START_MARKER = '<!-- ECC:SUMMARY:START -->';
-const SUMMARY_END_MARKER = '<!-- ECC:SUMMARY:END -->';
-const SESSION_SEPARATOR = '\n---\n';
+const METADATA_START_MARKER = '<!-- ECC:SESSION-METADATA:v1 -->';
+const METADATA_END_MARKER = '<!-- ECC:SESSION-METADATA:END -->';
+const MAX_PATH_LENGTH = 240;
 
 function extractSessionSummary(transcriptPath) {
   const content = readFile(transcriptPath);
   if (!content) return null;
 
   const lines = content.split('\n').filter(Boolean);
-  const userMessages = [];
   const toolsUsed = new Set();
   const filesModified = new Set();
+  let userMessageCount = 0;
+  const projectRoot = getProjectRoot();
+
+  const addTool = (toolName, filePath) => {
+    const tool = typeof toolName === 'string' ? stripAnsi(toolName).replace(/[\x00-\x1f\x7f]/g, '').slice(0, 80) : '';
+    if (tool) toolsUsed.add(tool);
+    if ((tool === 'Edit' || tool === 'Write') && typeof filePath === 'string') {
+      const absolute = path.resolve(projectRoot, filePath);
+      const relative = path.relative(projectRoot, absolute);
+      if (relative && !relative.startsWith(`..${path.sep}`) && !path.isAbsolute(relative)) {
+        filesModified.add(relative.split(path.sep).join('/').slice(0, MAX_PATH_LENGTH));
+      }
+    }
+  };
 
   for (const line of lines) {
     try {
       const entry = JSON.parse(line);
 
       if (entry.type === 'user' || entry.role === 'user' || entry.message?.role === 'user') {
-        const rawContent = entry.message?.content ?? entry.content;
-        const text = typeof rawContent === 'string'
-          ? rawContent
-          : Array.isArray(rawContent) ? rawContent.map(c => (c && c.text) || '').join(' ') : '';
-        const cleaned = stripAnsi(text).trim();
-        if (cleaned) userMessages.push(cleaned.slice(0, 200));
+        userMessageCount += 1;
       }
 
       if (entry.type === 'tool_use' || entry.tool_name) {
-        const toolName = entry.tool_name || entry.name || '';
-        if (toolName) toolsUsed.add(toolName);
-        const filePath = entry.tool_input?.file_path || entry.input?.file_path || '';
-        if (filePath && (toolName === 'Edit' || toolName === 'Write')) filesModified.add(filePath);
+        addTool(entry.tool_name || entry.name || '', entry.tool_input?.file_path || entry.input?.file_path || '');
       }
 
       if (entry.type === 'assistant' && Array.isArray(entry.message?.content)) {
         for (const block of entry.message.content) {
           if (block.type === 'tool_use') {
-            const toolName = block.name || '';
-            if (toolName) toolsUsed.add(toolName);
-            const filePath = block.input?.file_path || '';
-            if (filePath && (toolName === 'Edit' || toolName === 'Write')) filesModified.add(filePath);
+            addTool(block.name || '', block.input?.file_path || '');
           }
         }
       }
     } catch { /* skip unparseable lines */ }
   }
 
-  if (userMessages.length === 0) return null;
-
   return {
-    userMessages: userMessages.slice(-10),
+    userMessageCount,
     toolsUsed: Array.from(toolsUsed).slice(0, 20),
     filesModified: Array.from(filesModified).slice(0, 30),
-    totalMessages: userMessages.length,
   };
 }
 
-function buildSessionHeader(today, currentTime, metadata, existingContent = '') {
-  const headingMatch = existingContent.match(/^#\s+.+$/m);
-  const heading = headingMatch ? headingMatch[0] : `# Session: ${today}`;
-  const dateMatch = existingContent.match(/\*\*Date:\*\*\s*(.+)$/m);
-  const startedMatch = existingContent.match(/\*\*Started:\*\*\s*(.+)$/m);
-  const date = dateMatch ? dateMatch[1].trim() : today;
-  const started = startedMatch ? startedMatch[1].trim() : currentTime;
-
+function buildSessionHeader(today, currentTime, metadata) {
   return [
-    heading,
-    `**Date:** ${date}`,
-    `**Started:** ${started}`,
+    `# Session: ${today}`,
+    `**Date:** ${today}`,
+    `**Started:** ${currentTime}`,
     `**Last Updated:** ${currentTime}`,
     `**Project:** ${metadata.project}`,
     `**Branch:** ${metadata.branch}`,
@@ -86,30 +78,16 @@ function buildSessionHeader(today, currentTime, metadata, existingContent = '') 
   ].join('\n');
 }
 
-function buildSummarySection(summary) {
-  let section = '## Session Summary\n\n### Tasks\n';
-  for (const msg of summary.userMessages) {
-    section += `- ${msg.replace(/\n/g, ' ').replace(/`/g, '\\`')}\n`;
-  }
-  section += '\n';
-  if (summary.filesModified.length > 0) {
-    section += '### Files Modified\n';
-    for (const f of summary.filesModified) section += `- ${f}\n`;
-    section += '\n';
-  }
-  if (summary.toolsUsed.length > 0) {
-    section += `### Tools Used\n${summary.toolsUsed.join(', ')}\n\n`;
-  }
-  section += `### Stats\n- Total user messages: ${summary.totalMessages}\n`;
-  return section;
-}
-
-function buildSummaryBlock(summary) {
-  return `${SUMMARY_START_MARKER}\n${buildSummarySection(summary).trim()}\n${SUMMARY_END_MARKER}`;
-}
-
-function escapeRegExp(value) {
-  return String(value).replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+function buildMetadataBlock(summary, metadata) {
+  return `${METADATA_START_MARKER}\n${JSON.stringify({
+    version: 1,
+    projectKey: metadata.projectKey,
+    project: metadata.project,
+    branch: metadata.branch,
+    userMessageCount: summary.userMessageCount,
+    toolsUsed: summary.toolsUsed,
+    filesModified: summary.filesModified,
+  })}\n${METADATA_END_MARKER}`;
 }
 
 // Read stdin for transcript_path
@@ -137,61 +115,27 @@ async function main() {
 
   const sessionsDir = getSessionsDir();
   const today = getDateString();
-  const shortId = getSessionIdShort();
-  const sessionFile = path.join(sessionsDir, `${today}-${shortId}-session.tmp`);
+  const sessionFile = getProjectSessionFile();
   const branchResult = runCommand('git rev-parse --abbrev-ref HEAD');
 
   const metadata = {
-    project: getProjectName() || 'unknown',
-    branch: branchResult.success ? branchResult.output : 'unknown',
+    projectKey: getProjectKey(),
+    project: (getProjectName() || 'unknown').replace(/[\x00-\x1f\x7f]/g, '').slice(0, 120),
+    branch: (branchResult.success ? branchResult.output : 'unknown').replace(/[\x00-\x1f\x7f]/g, '').slice(0, 120),
   };
 
-  ensureDir(sessionsDir);
+  ensurePrivateDir(sessionsDir);
 
   const currentTime = getTimeString();
   let summary = null;
 
-  if (transcriptPath && fs.existsSync(transcriptPath)) {
-    summary = extractSessionSummary(transcriptPath);
-  }
+  if (transcriptPath && fs.existsSync(transcriptPath)) summary = extractSessionSummary(transcriptPath);
+  if (!summary) summary = { userMessageCount: 0, toolsUsed: [], filesModified: [] };
 
-  if (fs.existsSync(sessionFile)) {
-    let content = readFile(sessionFile);
-    if (content) {
-      // Update header timestamps
-      const sepIdx = content.indexOf(SESSION_SEPARATOR);
-      if (sepIdx !== -1) {
-        const existingHeader = content.slice(0, sepIdx);
-        const body = content.slice(sepIdx + SESSION_SEPARATOR.length);
-        const newHeader = buildSessionHeader(today, currentTime, metadata, existingHeader);
-        content = `${newHeader}${SESSION_SEPARATOR}${body}`;
-      }
-
-      // Update summary block
-      if (summary) {
-        const summaryBlock = buildSummaryBlock(summary);
-        if (content.includes(SUMMARY_START_MARKER) && content.includes(SUMMARY_END_MARKER)) {
-          content = content.replace(
-            new RegExp(`${escapeRegExp(SUMMARY_START_MARKER)}[\\s\\S]*?${escapeRegExp(SUMMARY_END_MARKER)}`),
-            summaryBlock
-          );
-        } else {
-          content += `\n\n${summaryBlock}`;
-        }
-      }
-
-      writeFile(sessionFile, content);
-      log(`[SessionEnd] Updated session file: ${sessionFile}`);
-    }
-  } else {
-    const summarySection = summary
-      ? `${buildSummaryBlock(summary)}\n\n### Notes for Next Session\n-\n\n### Context to Load\n\`\`\`\n[relevant files]\n\`\`\``
-      : `## Current State\n\n[Session context goes here]\n\n### Completed\n- [ ]\n\n### In Progress\n- [ ]\n\n### Notes for Next Session\n-\n\n### Context to Load\n\`\`\`\n[relevant files]\n\`\`\``;
-
-    const header = buildSessionHeader(today, currentTime, metadata);
-    writeFile(sessionFile, `${header}${SESSION_SEPARATOR}${summarySection}\n`);
-    log(`[SessionEnd] Created session file: ${sessionFile}`);
-  }
+  const header = buildSessionHeader(today, currentTime, metadata);
+  const content = `${header}\n---\n${buildMetadataBlock(summary, metadata)}\n`;
+  writePrivateFile(sessionFile, content);
+  log(`[SessionEnd] Saved project session metadata: ${sessionFile}`);
 
   process.exit(0);
 }

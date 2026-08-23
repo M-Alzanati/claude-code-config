@@ -5,22 +5,24 @@
  */
 
 const path = require('path');
-const { getSessionsDir, getDateTimeString, getTimeString, findFiles, ensureDir, appendFile, log } = require('./lib/utils');
+const {
+  getSessionsDir, getProjectKey, getProjectSessionFile, getDateTimeString, getTimeString,
+  ensurePrivateDir, appendPrivateFile, log
+} = require('./lib/utils');
 
 async function main() {
   const sessionsDir = getSessionsDir();
-  const compactionLog = path.join(sessionsDir, 'compaction-log.txt');
+  const compactionLog = path.join(sessionsDir, `${getProjectKey()}-compaction.log`);
 
-  ensureDir(sessionsDir);
+  ensurePrivateDir(sessionsDir);
 
   const timestamp = getDateTimeString();
-  appendFile(compactionLog, `[${timestamp}] Context compaction triggered\n`);
+  appendPrivateFile(compactionLog, `[${timestamp}] Context compaction triggered\n`);
 
-  const sessions = findFiles(sessionsDir, '*-session.tmp');
-  if (sessions.length > 0) {
-    const activeSession = sessions[0].path;
+  const activeSession = getProjectSessionFile();
+  if (require('fs').existsSync(activeSession)) {
     const timeStr = getTimeString();
-    appendFile(activeSession, `\n---\n**[Compaction occurred at ${timeStr}]** - Context was summarized\n`);
+    appendPrivateFile(activeSession, `\n---\n**[Compaction occurred at ${timeStr}]** - Context was summarized\n`);
   }
 
   log('[PreCompact] State saved before compaction');

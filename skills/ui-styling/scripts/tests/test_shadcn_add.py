@@ -11,35 +11,98 @@ import pytest
 import sys
 sys.path.insert(0, str(Path(__file__).parent.parent))
 
+import shadcn_add
 from shadcn_add import ShadcnInstaller
+
+
+@pytest.fixture
+def temp_project(tmp_path):
+    """Create temporary project structure."""
+    project_root = tmp_path / "test-project"
+    project_root.mkdir()
+    (project_root / "components.json").write_text(
+        json.dumps({
+            "style": "new-york",
+            "aliases": {
+                "components": "@/components",
+                "utils": "@/lib/utils",
+            },
+        })
+    )
+    (project_root / "components" / "ui").mkdir(parents=True)
+    return project_root
 
 
 class TestShadcnInstaller:
     """Test ShadcnInstaller class."""
 
-    @pytest.fixture
-    def temp_project(self, tmp_path):
-        """Create temporary project structure."""
-        project_root = tmp_path / "test-project"
-        project_root.mkdir()
-
-        # Create components.json
-        components_json = project_root / "components.json"
-        components_json.write_text(
-            json.dumps({
-                "style": "new-york",
-                "aliases": {
-                    "components": "@/components",
-                    "utils": "@/lib/utils"
-                }
-            })
+    @pytest.mark.parametrize("version", ["2.3.0", "1.2.3-alpha.1+001"])
+    def test_get_shadcn_version_accepts_exact_semver(self, tmp_path, version):
+        (tmp_path / "package.json").write_text(
+            json.dumps({"dependencies": {"shadcn": version}})
         )
 
-        # Create components directory
-        ui_dir = project_root / "components" / "ui"
-        ui_dir.mkdir(parents=True)
+        assert ShadcnInstaller(project_root=tmp_path)._get_shadcn_version() == version
 
-        return project_root
+    @pytest.mark.parametrize(
+        "version",
+        [
+            "v2.3.0",
+            " 2.3.0",
+            "2.3.0 ",
+            "02.3.0",
+            "2.03.0",
+            "2.3.00",
+            "1.2.3-alpha.01",
+            "1.2",
+            "1.2.3.4",
+            ">=1.2.3",
+            "^1.2.3",
+            "~1.2.3",
+            "latest",
+            "npm:shadcn@1.2.3",
+            "file:../shadcn",
+            "https://registry.npmjs.org/shadcn/-/shadcn-1.2.3.tgz",
+            "git+https://github.com/shadcn-ui/shadcn.git",
+            "1.2.3+build..metadata",
+            "1.2.3-alpha..1",
+            "1.2.3-alpha_1",
+            "1.2.3+build_1",
+            None,
+            123,
+            ["1.2.3"],
+            {"version": "1.2.3"},
+        ],
+    )
+    def test_get_shadcn_version_rejects_non_exact_semver(self, tmp_path, version):
+        (tmp_path / "package.json").write_text(
+            json.dumps({"devDependencies": {"shadcn": version}})
+        )
+
+        assert ShadcnInstaller(project_root=tmp_path)._get_shadcn_version() == "2.3.0"
+
+    @pytest.mark.parametrize("package", [None, [], "package", 123])
+    def test_get_shadcn_version_falls_back_for_non_object_package_json(
+        self, tmp_path, package
+    ):
+        (tmp_path / "package.json").write_text(json.dumps(package))
+
+        assert ShadcnInstaller(project_root=tmp_path)._get_shadcn_version() == "2.3.0"
+
+    @pytest.mark.parametrize("version", ["latest", "^1.2.3", "file:../shadcn", None])
+    def test_generated_npx_command_uses_pinned_version_for_rejected_spec(
+        self, temp_project, version
+    ):
+        (temp_project / "package.json").write_text(
+            json.dumps({"dependencies": {"shadcn": version}})
+        )
+
+        success, message = ShadcnInstaller(
+            project_root=temp_project, dry_run=True
+        ).add_components(["button"])
+
+        assert success is True
+        assert "Would run: npx shadcn@2.3.0 add button" in message
 
     def test_init_default_project_root(self):
         """Test initialization with default project root."""
@@ -173,7 +236,7 @@ class TestShadcnInstaller:
         # Verify correct command was called
         mock_run.assert_called_once()
         call_args = mock_run.call_args[0][0]
-        assert call_args[:3] == ["npx", "shadcn@latest", "add"]
+        assert call_args[:3] == ["npx", "shadcn@2.3.0", "add"]
         assert "button" in call_args
         assert "card" in call_args
 
@@ -264,3 +327,61 @@ class TestShadcnInstaller:
         assert success is True
         assert "button" in message
         assert "card" in message
+
+
+class TestShadcnCli:
+    """Exercise the public CLI entry point without spawning a subprocess."""
+
+    def test_list_command(self, temp_project, monkeypatch, capsys):
+        (temp_project / "components" / "ui" / "button.tsx").write_text("button")
+        monkeypatch.setattr(
+            sys,
+            "argv",
+            ["shadcn_add.py", "--list", "--project-root", str(temp_project)],
+        )
+
+        with pytest.raises(SystemExit) as result:
+            shadcn_add.main()
+
+        assert result.value.code == 0
+        assert "button" in capsys.readouterr().out
+
+    def test_all_and_component_dry_run_commands(
+        self, temp_project, monkeypatch, capsys
+    ):
+        for args, expected in [
+            (["--all", "--dry-run"], "--all"),
+            (["button", "--dry-run"], "button"),
+        ]:
+            monkeypatch.setattr(
+                sys,
+                "argv",
+                ["shadcn_add.py", *args, "--project-root", str(temp_project)],
+            )
+            with pytest.raises(SystemExit) as result:
+                shadcn_add.main()
+
+            assert result.value.code == 0
+            assert expected in capsys.readouterr().out
+
+    def test_no_args_exits_with_help(self, monkeypatch, capsys):
+        monkeypatch.setattr(sys, "argv", ["shadcn_add.py"])
+
+        with pytest.raises(SystemExit) as result:
+            shadcn_add.main()
+
+        assert result.value.code == 1
+        assert "usage:" in capsys.readouterr().out
+
+    def test_list_error_exits_nonzero(self, tmp_path, monkeypatch, capsys):
+        monkeypatch.setattr(
+            sys,
+            "argv",
+            ["shadcn_add.py", "--list", "--project-root", str(tmp_path)],
+        )
+
+        with pytest.raises(SystemExit) as result:
+            shadcn_add.main()
+
+        assert result.value.code == 1
+        assert "not initialized" in capsys.readouterr().out

@@ -111,6 +111,6 @@ run git config core.hooksPath .githooks
 say "--- verify ---"
 if [ "$DRY" = 0 ]; then
     chmod +x statusline.sh check.sh hooks/*.sh .githooks/* 2>/dev/null || true
-    ./check.sh || say "  (config has problems, see above)"
+    ./check.sh || { say "  (config has problems, see above)"; exit 1; }
 fi
 say "done. restart Claude Code to load hooks."

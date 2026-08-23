@@ -18,9 +18,26 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.x'
+
+      - name: Install Python test requirements
+        run: python -m pip install -r skills/ui-styling/scripts/tests/requirements.txt
+
       - name: Install jq
         run: command -v jq || (sudo apt-get update && sudo apt-get install -y jq)
         if: runner.os == 'Linux'
+
+      - name: Security tests
+        run: sh tests/check-security.sh
+
+      - name: Python tests
+        run: >-
+          python -m pytest skills/ui-styling/scripts/tests
+          --cov=shadcn_add --cov=tailwind_config_gen
+          --cov-report=term-missing --cov-fail-under=80
 
       - name: Validate config
         # check.sh resolves its own root from CLAUDE_CONFIG_DIR, so it runs

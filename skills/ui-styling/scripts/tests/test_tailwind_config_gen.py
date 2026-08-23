@@ -10,6 +10,7 @@ import pytest
 import sys
 sys.path.insert(0, str(Path(__file__).parent.parent))
 
+import tailwind_config_gen
 from tailwind_config_gen import TailwindConfigGenerator
 
 
@@ -336,6 +337,98 @@ class TestTailwindConfigGenerator:
         assert "module.exports" in content
         assert "primary" in content
         assert "@tailwindcss/forms" in content
+
+    def test_invalid_plugin_name_is_rejected(self):
+        generator = TailwindConfigGenerator()
+        generator.add_plugins(["bad/plugin;name"])
+
+        with pytest.raises(ValueError, match="Invalid plugin name"):
+            generator.generate_config_string()
+
+
+class TestTailwindCli:
+    """Exercise CLI parsing and both validation/write paths in-process."""
+
+    def test_validate_only_with_all_configuration_options(
+        self, monkeypatch, capsys
+    ):
+        monkeypatch.setattr(
+            sys,
+            "argv",
+            [
+                "tailwind_config_gen.py",
+                "--validate-only",
+                "--framework",
+                "nextjs",
+                "--js",
+                "--colors",
+                "brand:#3b82f6",
+                "--fonts",
+                "display:Playfair Display,serif",
+                "--spacing",
+                "navbar:4rem",
+                "--breakpoints",
+                "3xl:1920px",
+                "--plugins",
+            ],
+        )
+
+        with pytest.raises(SystemExit) as result:
+            tailwind_config_gen.main()
+
+        output = capsys.readouterr().out
+        assert result.value.code == 0
+        assert "Configuration valid" in output
+        assert "brand" in output
+        assert "Playfair Display" in output
+        assert "navbar" in output
+        assert "3xl" in output
+        assert "tailwindcss-animate" in output
+
+    def test_write_with_config_options(self, tmp_path, monkeypatch, capsys):
+        output_path = tmp_path / "tailwind.config.js"
+        monkeypatch.setattr(
+            sys,
+            "argv",
+            [
+                "tailwind_config_gen.py",
+                "--js",
+                "--framework",
+                "vue",
+                "--output",
+                str(output_path),
+                "--colors",
+                "primary:#3b82f6",
+                "--fonts",
+                "sans:Inter,system-ui",
+                "--spacing",
+                "18:4.5rem",
+                "--breakpoints",
+                "tablet:768px",
+            ],
+        )
+
+        with pytest.raises(SystemExit) as result:
+            tailwind_config_gen.main()
+
+        assert result.value.code == 0
+        assert output_path.exists()
+        assert "Configuration written to" in capsys.readouterr().out
+        assert "primary" in output_path.read_text()
+
+    @pytest.mark.parametrize(
+        "option", ["--colors", "--fonts", "--spacing", "--breakpoints"]
+    )
+    def test_invalid_configuration_spec_exits_nonzero(
+        self, option, monkeypatch, capsys
+    ):
+        monkeypatch.setattr(sys, "argv", ["tailwind_config_gen.py", option, "invalid"])
+
+        with pytest.raises(SystemExit) as result:
+            tailwind_config_gen.main()
+
+        assert result.value.code == 1
+        assert "Invalid" in capsys.readouterr().err
 
 
 def _strip_to_object(config_str: str) -> str:

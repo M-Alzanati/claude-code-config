@@ -6,6 +6,7 @@
 const fs = require('fs');
 const path = require('path');
 const os = require('os');
+const crypto = require('crypto');
 const { execSync, spawnSync } = require('child_process');
 
 const isWindows = process.platform === 'win32';
@@ -13,10 +14,36 @@ const isMacOS = process.platform === 'darwin';
 const isLinux = process.platform === 'linux';
 
 function getHomeDir() { return os.homedir(); }
-function getClaudeDir() { return path.join(getHomeDir(), '.claude'); }
+function getClaudeDir() { return process.env.CLAUDE_CONFIG_DIR || path.join(getHomeDir(), '.claude'); }
 function getSessionsDir() { return path.join(getClaudeDir(), 'sessions'); }
 function getLearnedSkillsDir() { return path.join(getClaudeDir(), 'skills', 'learned'); }
 function getTempDir() { return os.tmpdir(); }
+
+function getProjectRoot() {
+  const result = runCommand('git rev-parse --show-toplevel');
+  const candidate = result.success && result.output ? result.output : process.cwd();
+  try { return fs.realpathSync(candidate); } catch { return path.resolve(candidate); }
+}
+
+function getGitIdentity(root = getProjectRoot()) {
+  const gitDirResult = runCommand('git rev-parse --git-dir');
+  const rootCommitResult = runCommand('git rev-list --max-parents=0 HEAD');
+  const gitDir = gitDirResult.success && gitDirResult.output
+    ? path.resolve(root, gitDirResult.output)
+    : '';
+  let canonicalGitDir = gitDir;
+  try { canonicalGitDir = fs.realpathSync(gitDir); } catch { /* repository may not have a worktree yet */ }
+  return `${canonicalGitDir}\n${rootCommitResult.success ? rootCommitResult.output : 'unborn'}`;
+}
+
+function getProjectKey() {
+  const root = getProjectRoot();
+  return crypto.createHash('sha256').update(`${root}\n${getGitIdentity(root)}`).digest('hex');
+}
+
+function getProjectSessionFile() {
+  return path.join(getSessionsDir(), `${getProjectKey()}-session.tmp`);
+}
 
 function ensureDir(dirPath) {
   try {
@@ -25,6 +52,57 @@ function ensureDir(dirPath) {
     if (err.code !== 'EEXIST') throw new Error(`Failed to create directory '${dirPath}': ${err.message}`);
   }
   return dirPath;
+}
+
+function ensurePrivateDir(dirPath) {
+  let stats;
+  try {
+    stats = fs.lstatSync(dirPath);
+    if (stats.isSymbolicLink() || !stats.isDirectory()) throw new Error(`Private directory is not a directory: '${dirPath}'`);
+  } catch (err) {
+    if (err.code !== 'ENOENT') throw err;
+    fs.mkdirSync(dirPath, { recursive: true, mode: 0o700 });
+    stats = fs.lstatSync(dirPath);
+    if (stats.isSymbolicLink() || !stats.isDirectory()) throw new Error(`Private directory is not a directory: '${dirPath}'`);
+  }
+  fs.chmodSync(dirPath, 0o700);
+  return dirPath;
+}
+
+function openPrivateFile(filePath, flags) {
+  ensurePrivateDir(path.dirname(filePath));
+  try {
+    const stats = fs.lstatSync(filePath);
+    if (stats.isSymbolicLink() || !stats.isFile()) throw new Error(`Private file is not a regular file: '${filePath}'`);
+  } catch (err) {
+    if (err.code !== 'ENOENT') throw err;
+  }
+  const noFollow = fs.constants.O_NOFOLLOW || 0;
+  const fd = fs.openSync(filePath, flags | noFollow, 0o600);
+  fs.fchmodSync(fd, 0o600);
+  return fd;
+}
+
+function readPrivateFile(filePath) {
+  let fd;
+  try {
+    fd = openPrivateFile(filePath, fs.constants.O_RDONLY);
+    return fs.readFileSync(fd, 'utf8');
+  } catch {
+    return null;
+  } finally {
+    if (fd !== undefined) fs.closeSync(fd);
+  }
+}
+
+function writePrivateFile(filePath, content) {
+  const fd = openPrivateFile(filePath, fs.constants.O_WRONLY | fs.constants.O_CREAT | fs.constants.O_TRUNC);
+  try { fs.writeFileSync(fd, content, 'utf8'); } finally { fs.closeSync(fd); }
+}
+
+function appendPrivateFile(filePath, content) {
+  const fd = openPrivateFile(filePath, fs.constants.O_WRONLY | fs.constants.O_CREAT | fs.constants.O_APPEND);
+  try { fs.writeFileSync(fd, content, 'utf8'); } finally { fs.closeSync(fd); }
 }
 
 function getDateString() {
@@ -136,7 +214,9 @@ function runCommand(cmd, options = {}) {
 
 module.exports = {
   isWindows, isMacOS, isLinux,
-  getHomeDir, getClaudeDir, getSessionsDir, getLearnedSkillsDir, getTempDir, ensureDir,
+  getHomeDir, getClaudeDir, getSessionsDir, getLearnedSkillsDir, getTempDir,
+  getProjectRoot, getGitIdentity, getProjectKey, getProjectSessionFile, ensureDir, ensurePrivateDir,
+  openPrivateFile, readPrivateFile, writePrivateFile, appendPrivateFile,
   getDateString, getTimeString, getDateTimeString,
   getSessionIdShort, getGitRepoName, getProjectName,
   findFiles, readFile, writeFile, appendFile, stripAnsi,

@@ -7,8 +7,9 @@ cwd=$(printf '%s' "$input" | jq -r '.cwd // ""')
 printf '[%s@%s %s]' "$(whoami)" "$(hostname -s)" "$(basename "${cwd:-$PWD}")"
 
 # Prefer the installed plugin (newest) over the marketplace checkout.
-P="$HOME/.claude/plugins"
-pt=$(ls "$P/cache/ponytail/ponytail/"*/hooks/ponytail-statusline.sh 2>/dev/null | sort -V | tail -1)
+P="${CLAUDE_CONFIG_DIR:-$HOME/.claude}/plugins"
+# BSD sort has no -V; newest installed plugin is the useful portable fallback.
+pt=$(ls -td "$P/cache/ponytail/ponytail/"*/hooks/ponytail-statusline.sh 2>/dev/null | head -1)
 [ -f "$pt" ] || pt="$P/marketplaces/ponytail/hooks/ponytail-statusline.sh"
 [ -f "$pt" ] && sh "$pt" 2>/dev/null
 

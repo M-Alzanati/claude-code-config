@@ -9,32 +9,30 @@
 
 const fs = require('fs');
 const path = require('path');
-const { getTempDir, log } = require('./lib/utils');
+const crypto = require('crypto');
+const { getClaudeDir, openPrivateFile, log } = require('./lib/utils');
 
 async function main() {
   const sessionId = (process.env.CLAUDE_SESSION_ID || 'default').replace(/[^a-zA-Z0-9_-]/g, '') || 'default';
-  const counterFile = path.join(getTempDir(), `claude-tool-count-${sessionId}`);
+  const counterDir = path.join(getClaudeDir(), 'private');
+  const counterFile = path.join(counterDir, `tool-count-${crypto.createHash('sha256').update(sessionId).digest('hex')}`);
   const rawThreshold = parseInt(process.env.COMPACT_THRESHOLD || '50', 10);
   const threshold = Number.isFinite(rawThreshold) && rawThreshold > 0 && rawThreshold <= 10000 ? rawThreshold : 50;
 
   let count = 1;
 
+  const fd = openPrivateFile(counterFile, fs.constants.O_RDWR | fs.constants.O_CREAT);
   try {
-    const fd = fs.openSync(counterFile, 'a+');
-    try {
-      const buf = Buffer.alloc(64);
-      const bytesRead = fs.readSync(fd, buf, 0, 64, 0);
-      if (bytesRead > 0) {
-        const parsed = parseInt(buf.toString('utf8', 0, bytesRead).trim(), 10);
-        count = (Number.isFinite(parsed) && parsed > 0 && parsed <= 1000000) ? parsed + 1 : 1;
-      }
-      fs.ftruncateSync(fd, 0);
-      fs.writeSync(fd, String(count), 0);
-    } finally {
-      fs.closeSync(fd);
+    const buf = Buffer.alloc(64);
+    const bytesRead = fs.readSync(fd, buf, 0, 64, 0);
+    if (bytesRead > 0) {
+      const parsed = parseInt(buf.toString('utf8', 0, bytesRead).trim(), 10);
+      count = (Number.isFinite(parsed) && parsed > 0 && parsed <= 1000000) ? parsed + 1 : 1;
     }
-  } catch {
-    fs.writeFileSync(counterFile, String(count));
+    fs.ftruncateSync(fd, 0);
+    fs.writeSync(fd, String(count), 0);
+  } finally {
+    fs.closeSync(fd);
   }
 
   if (count === threshold) {
