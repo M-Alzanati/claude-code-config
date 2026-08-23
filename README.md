@@ -61,7 +61,7 @@ Never `git reset --hard` here — it deletes local config the repo doesn't track
 | `settings.json` | Model, effort, env, hooks, statusLine, enabled plugins |
 | `CLAUDE.md` | Global instructions for every project (imports `RTK.md`) |
 | `PRACTICES.md` | How to drive a coding agent. The agent never commits — you review first |
-| `statusline.sh` | `[user@host cwd][PONYTAIL] 91k/1.0M 9%` |
+| `statusline.sh` | Shell prompt, ponytail mode, and context usage — see below |
 | `templates/CLAUDE.md` | Seed template offered to projects that lack one |
 | `install.sh` / `check.sh` | Setup, and validation you can run any time |
 | `hooks/` | See below |
@@ -106,10 +106,20 @@ so a broken config can't be committed. `git commit --no-verify` bypasses it.
 forget stays untracked instead of leaking. **Add new config to the allowlist
 explicitly; never loosen the `*` rule.**
 
-## Statusline knobs
+## Statusline
 
-All in `statusline.sh`. Usage comes straight from the `context_window` object the
-harness puts on stdin, so there's no estimate to keep in sync.
+Real output from `statusline.sh` at each threshold — grey while there's room,
+amber when it's filling, red when it's time to `/compact`:
+
+```
+[you@host myproject][PONYTAIL]  91k/1.0M  9%     grey
+[you@host myproject][PONYTAIL] 180k/1.0M 18%     amber
+[you@host myproject][PONYTAIL] 420k/1.0M 42%     red
+```
+
+The knobs are all in `statusline.sh`. Usage comes straight from the
+`context_window` object the harness puts on stdin, so there's no estimate to
+keep in sync.
 
 | Knob | Current |
 |---|---|
