@@ -110,8 +110,19 @@ repositories and config directories for each case rather than mocking them.
 - `hooks/ecc/` stores bounded, project-specific session metadata and suggests
   compaction when tool use grows large.
 - `statusline.sh` shows the current project and context usage.
-- `CLAUDE.md` and `PRACTICES.md` contain the shared working rules, including
-  the voice to use in pull requests, review comments and commit messages.
+- `CLAUDE.md` and `PRACTICES.md` contain the shared working rules.
+
+`CLAUDE.md` also sets the voice for pull requests, review comments and commit
+messages, on the theory that they are read by a person months later:
+
+- Say why, not what — the diff already shows what changed.
+- Open with the point. No "This PR...", no "Summary:", no restating the title.
+- Skip the compliments; "Great work!" and "Nice catch!" are padding.
+- One concern per review comment, with the concrete failure it causes. Ask
+  rather than assert when you are not sure it is wrong.
+- Suggest the fix. A complaint without a direction is work handed back.
+- Plain words: no emoji headers, no severity badges, no checklists where two
+  sentences do.
 
 Set `CLAUDE_CONFIG_DIR` to deploy somewhere other than `~/.claude`; the
 installer, hooks and validator all honor it.
