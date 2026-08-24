@@ -6,4 +6,6 @@ g=$(git config --global core.hooksPath 2>/dev/null)
 if [ -n "$g" ] && [ -x "$g/pre-commit" ]; then
     "$g/pre-commit" || exit 1
 fi
-exec "$(git rev-parse --show-toplevel)/check.sh"
+# Validate the checkout being committed, not whatever is deployed in ~/.claude.
+root=$(git rev-parse --show-toplevel)
+exec env CLAUDE_CONFIG_DIR="$root" "$root/check.sh"

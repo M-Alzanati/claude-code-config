@@ -25,7 +25,6 @@ skills/**
 !.githooks/
 !.githooks/**
 !PRACTICES.md
-!hooks/output-reminder.sh
 !LICENSE
 !.github/
 !.github/**
@@ -37,3 +36,5 @@ skills/**
 !docs/superpowers/plans/**
 !tests/
 !tests/check-security.sh
+!output-styles/
+!output-styles/**

@@ -1,6 +1,20 @@
 #!/bin/sh
 # Validate this config. Called by install.sh and by the pre-commit hook.
 # Exits non-zero if anything is broken. Run standalone any time: ./check.sh
+# Two roots: CFG is the deployed ~/.claude, SRC is the checkout it links back
+# to. They are the same directory only in the legacy in-place layout.
+resolve_dir() {
+    p=$1
+    while [ -L "$p" ]; do
+        t=$(readlink "$p")
+        case "$t" in
+            /*) p=$t ;;
+            *) p=$(dirname "$p")/$t ;;
+        esac
+    done
+    (cd "$(dirname "$p")" && pwd)
+}
+SRC=$(resolve_dir "$0")
 CFG="${CLAUDE_CONFIG_DIR:-$HOME/.claude}"
 cd "$CFG" || exit 1
 fail=0
@@ -61,16 +75,24 @@ if [ -f hooks/.rtk-hook.sha256 ]; then
 fi
 
 echo '{}' | ./statusline.sh >/dev/null 2>&1; chk $? "statusline.sh runs"
+
+style=$(jq -r '.outputStyle // empty' settings.json 2>/dev/null)
+case "$style" in
+    ''|default|concise|Explanatory|Learning) ;;
+    *[!A-Za-z0-9._-]*|.|..) chk 1 "output style name is safe: $style" ;;
+    *) [ -f "output-styles/$style.md" ]; chk $? "output style file exists: $style" ;;
+esac
 echo '{"cwd":"/"}' | ./hooks/suggest-claude-md.sh >/dev/null 2>&1; chk $? "suggest-claude-md.sh runs"
 
-# The ignore rules that keep credentials and transcripts out must still hold.
+# Repository hygiene, checked against the checkout rather than ~/.claude: the
+# ignore rules that keep credentials and transcripts out must still hold.
 for p in .credentials.json projects history.jsonl plugins settings.local.json; do
-    git check-ignore -q "$p" 2>/dev/null; chk $? "gitignored: $p"
+    git -C "$SRC" check-ignore -q "$p" 2>/dev/null; chk $? "gitignored: $p"
 done
 
 # Scan exactly what the next commit would contain. `git grep --cached` covers
 # both committed entries and normally staged changes without changing the index.
-hits=$(git grep --cached -lE 'sk-ant-[A-Za-z0-9]|github_pat_[A-Za-z0-9_]{20,}|gh[pousr]_[A-Za-z0-9]{20,}|BEGIN [A-Z ]*PRIVATE KEY|A[KS]IA[0-9A-Z]{16}' -- 2>/dev/null)
+hits=$(git -C "$SRC" grep --cached -lE 'sk-ant-[A-Za-z0-9]|github_pat_[A-Za-z0-9_]{20,}|gh[pousr]_[A-Za-z0-9]{20,}|BEGIN [A-Z ]*PRIVATE KEY|A[KS]IA[0-9A-Z]{16}' -- 2>/dev/null)
 scan_status=$?
 case "$scan_status" in
     0) chk 1 "no secrets in Git index -> $hits" ;;

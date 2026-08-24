@@ -7,57 +7,88 @@ and a small set of shared instructions.
 
 ## Install
 
-Claude Code creates `~/.claude` on first run. Install into that directory so
-your existing local configuration can be backed up and merged:
+Clone this repository anywhere you keep source, then run the installer. It
+deploys into `~/.claude` — the checkout stays the source of truth.
 
 ```sh
-cd ~/.claude
-git init
-git remote add origin https://github.com/M-Alzanati/claude-code-config.git
-git fetch origin
-git checkout origin/main -- install.sh
-sh install.sh
+git clone https://github.com/M-Alzanati/claude-code-config.git ~/src/claude-code-config
+cd ~/src/claude-code-config
+./install.sh
 ```
 
 Restart Claude Code when the installer finishes.
 
-The installer needs `git` and `jq`. It backs up the current config, keeps
+The installer needs `git` and `jq`. It backs up anything it displaces, keeps
 machine-local settings, installs optional dependencies only with confirmation,
-and runs the validation check before it succeeds.
+and runs the validation check before it succeeds. Re-running it is safe.
 
 Useful flags:
 
 ```sh
-sh install.sh --dry-run   # show what would change
-sh install.sh --no-deps   # skip dependency installation
-sh install.sh --yes       # accept installer prompts
+./install.sh --update    # git pull, relink anything new, verify
+./install.sh --dry-run   # show what would change
+./install.sh --no-deps   # skip dependency installation
+./install.sh --yes       # accept installer prompts
 ```
+
+## Update
+
+```sh
+cd ~/src/claude-code-config
+./install.sh --update
+```
+
+Managed paths are symlinked into `~/.claude`, so a plain `git pull` already
+updates the hooks, output styles, templates and instruction files. Use
+`--update` when you want the pull, the relink for newly added paths, the
+`settings.json` merge, and the validation check in one step.
+
+`settings.json` is the exception: it is copied rather than symlinked, because
+Claude Code rewrites it itself (`/output-style`, plugin installs) and an atomic
+write would silently replace a symlink with a regular file. Your keys survive
+the merge; the repository wins on shared ones.
+
+## How it is laid out
+
+| Path in `~/.claude` | Kind | Source |
+| --- | --- | --- |
+| `hooks/` | symlink | checkout |
+| `output-styles/` | symlink | checkout |
+| `templates/` | symlink | checkout |
+| `skills/ui-styling` | symlink | checkout |
+| `statusline.sh`, `check.sh` | symlink | checkout |
+| `CLAUDE.md`, `RTK.md`, `PRACTICES.md` | symlink | checkout |
+| `settings.json` | copy | merged on install |
+| `settings.local.json` | untouched | yours |
+
+Deleting the checkout breaks the symlinks, so keep it somewhere permanent.
 
 ## Verify
 
-Run this from the configuration directory:
-
 ```sh
+cd ~/src/claude-code-config
 ./check.sh
 ```
 
-It checks the JSON, hook paths, script startup, ignored sensitive files, the
-RTK hook checksum, and token-like material in the Git index. The same checks
-run in CI on Linux and macOS.
+It checks the JSON, hook paths, script startup, the configured output style,
+ignored sensitive files, the RTK hook checksum, and token-like material in the
+Git index. Config checks run against `~/.claude`; the ignore rules and secret
+scan run against the checkout. The same checks run in CI on Linux and macOS.
 
 ## What this config changes
 
 - `settings.json` enables the hooks, statusline, model preferences, and plugins.
-- `hooks/output-style.sh` and `hooks/output-reminder.sh` keep normal replies
-  brief and require fresh command output before claiming work is complete,
-  passing, secure, or ready to commit.
+- `output-styles/codex.md` is the active output style: Codex CLI's final-answer
+  rules — plain text, short `**Title Case**` headers only when they aid
+  scanning, `-` bullets, monospace for commands and paths, and clickable
+  `path/file.ts:42` references. Switch with `/output-style`.
 - `hooks/ecc/` stores bounded, project-specific session metadata and suggests
   compaction when tool use grows large.
 - `statusline.sh` shows the current project and context usage.
 - `CLAUDE.md` and `PRACTICES.md` contain the shared working rules.
 
-Use `CLAUDE_CONFIG_DIR` instead of `~/.claude` when you deliberately keep this
-configuration elsewhere; the hooks and validator honor it.
+Set `CLAUDE_CONFIG_DIR` to deploy somewhere other than `~/.claude`; the
+installer, hooks and validator all honor it.
 
 ## Before you rely on it
 
@@ -65,8 +96,8 @@ configuration elsewhere; the hooks and validator honor it.
 - `rtk` is optional but needed for the Bash rewrite hook. Verify the binary you
   install is the intended tool before enabling it.
 - The vendored `hooks/ecc/` code does not update itself. Update it deliberately.
-- Do not run `git reset --hard` inside `~/.claude`; it can discard local config
-  that this repository intentionally does not track.
+- Earlier versions made `~/.claude` itself the repository. If yours still has a
+  `~/.claude/.git`, the installer says so; remove it once the new install works.
 
 ## License
 

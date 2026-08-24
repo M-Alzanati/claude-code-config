@@ -50,10 +50,6 @@
           {
             "type": "command",
             "command": "\"${CLAUDE_CONFIG_DIR:-$HOME/.claude}/hooks/suggest-claude-md.sh\""
-          },
-          {
-            "type": "command",
-            "command": "\"${CLAUDE_CONFIG_DIR:-$HOME/.claude}/hooks/output-style.sh\""
           }
         ]
       }
@@ -67,17 +63,6 @@
             "command": "node \"${CLAUDE_CONFIG_DIR:-$HOME/.claude}/hooks/ecc/session-end.js\"",
             "timeout": 10,
             "async": true
-          }
-        ]
-      }
-    ],
-    "UserPromptSubmit": [
-      {
-        "matcher": "*",
-        "hooks": [
-          {
-            "type": "command",
-            "command": "\"${CLAUDE_CONFIG_DIR:-$HOME/.claude}/hooks/output-reminder.sh\""
           }
         ]
       }
@@ -106,7 +91,7 @@
       }
     }
   },
-  "outputStyle": "concise",
+  "outputStyle": "codex",
   "effortLevel": "xhigh",
   "theme": "dark-daltonized"
 }

@@ -39,6 +39,7 @@ make_config_fixture() {
     mkdir -p "$fixture"
     cp "$ROOT/check.sh" "$ROOT/settings.json" "$ROOT/statusline.sh" "$ROOT/.gitignore" "$ROOT/README.md" "$fixture/"
     cp -R "$ROOT/hooks" "$fixture/"
+    cp -R "$ROOT/output-styles" "$fixture/"
     chmod +x "$fixture/check.sh" "$fixture/statusline.sh" "$fixture/hooks/"*.sh
     git -C "$fixture" init -q
     git -C "$fixture" add .
@@ -117,7 +118,7 @@ test_scanner_error_fails_closed() {
     mkdir -p "$fixture/fake-bin"
     sed "s|@REAL_GIT@|$real_git|" > "$fixture/fake-bin/git" <<'EOF'
 #!/bin/sh
-[ "$1" = grep ] && exit 2
+case " $* " in *" grep "*) exit 2 ;; esac
 exec "@REAL_GIT@" "$@"
 EOF
     chmod +x "$fixture/fake-bin/git"
@@ -146,13 +147,21 @@ EOF
     ' >/dev/null
 }
 
-test_output_policy_requires_evidence() {
-    for hook in hooks/output-style.sh hooks/output-reminder.sh; do
-        context=$("$ROOT/$hook" | jq -r '.hookSpecificOutput.additionalContext') || return 1
-        context=$(printf '%s' "$context" | tr '\n' ' ')
-        printf '%s\n' "$context" | grep -q 'fresh command output from this turn' || return 1
-        printf '%s\n' "$context" | grep -q 'unverified' || return 1
-    done
+test_output_style_file_is_present() {
+    style=$(jq -r '.outputStyle // empty' "$ROOT/settings.json") || return 1
+    [ -n "$style" ] || return 1
+    [ -f "$ROOT/output-styles/$style.md" ] || return 1
+    head -1 "$ROOT/output-styles/$style.md" | grep -q '^---$' || return 1
+    grep -qx "name: $style" "$ROOT/output-styles/$style.md"
+}
+
+test_checker_rejects_missing_output_style() {
+    fixture="$TMP_ROOT/nostyle"
+    make_config_fixture "$fixture"
+    rm -f "$fixture/output-styles/"*.md
+    output=$(CLAUDE_CONFIG_DIR="$fixture" "$fixture/check.sh" 2>&1)
+    status=$?
+    [ "$status" -ne 0 ] && printf '%s\n' "$output" | grep -q 'FAIL  output style file exists:'
 }
 
 test_settings_use_portable_paths() {
@@ -328,27 +337,82 @@ test_template_path_override() {
         ! printf '%s\n' "$output" | grep -Fq "$home/.claude/templates/CLAUDE.md"
 }
 
+make_src_fixture() {
+    src=$1
+    mkdir -p "$src/hooks" "$src/.githooks"
+    cp "$ROOT/install.sh" "$ROOT/settings.json" "$src/"
+    : > "$src/statusline.sh"
+    : > "$src/hooks/noop.sh"
+    : > "$src/.githooks/pre-commit"
+    git -C "$src" init -q
+    git -C "$src" add .
+}
+
 test_install_propagates_check_failure() {
-    fixture="$TMP_ROOT/install"
-    mkdir -p "$fixture/hooks" "$fixture/.githooks"
-    cp "$ROOT/install.sh" "$fixture/"
-    cat > "$fixture/check.sh" <<'EOF'
+    src="$TMP_ROOT/install-src"
+    cfg="$TMP_ROOT/install-cfg"
+    make_src_fixture "$src"
+    mkdir -p "$cfg"
+    cat > "$src/check.sh" <<'EOF'
 #!/bin/sh
 echo 'sentinel check failure'
 exit 7
 EOF
-    : > "$fixture/statusline.sh"
-    : > "$fixture/hooks/noop.sh"
-    : > "$fixture/.githooks/pre-commit"
-    git -C "$fixture" init -q
-    git -C "$fixture" add .
-    git -C "$fixture" -c core.hooksPath=/dev/null -c user.name=test -c user.email=test@example.invalid commit -qm baseline
-    git -C "$fixture" branch origin/main
-    output=$(CLAUDE_CONFIG_DIR="$fixture" sh "$fixture/install.sh" --yes --no-deps 2>&1)
+    output=$(CLAUDE_CONFIG_DIR="$cfg" sh "$src/install.sh" --yes --no-deps 2>&1)
     status=$?
     [ "$status" -ne 0 ] &&
         printf '%s\n' "$output" | grep -q 'sentinel check failure' &&
         printf '%s\n' "$output" | grep -q '(config has problems, see above)'
+}
+
+test_install_refuses_in_place_layout() {
+    src="$TMP_ROOT/inplace-src"
+    make_src_fixture "$src"
+    output=$(CLAUDE_CONFIG_DIR="$src" sh "$src/install.sh" --yes --no-deps 2>&1)
+    status=$?
+    [ "$status" -ne 0 ] && printf '%s\n' "$output" | grep -q 'this checkout is'
+}
+
+test_install_symlinks_assets_but_copies_settings() {
+    src="$TMP_ROOT/link-src"
+    cfg="$TMP_ROOT/link-cfg"
+    make_src_fixture "$src"
+    mkdir -p "$cfg"
+    printf '#!/bin/sh\nexit 0\n' > "$src/check.sh"
+    CLAUDE_CONFIG_DIR="$cfg" sh "$src/install.sh" --yes --no-deps >/dev/null 2>&1 || return 1
+    [ -L "$cfg/hooks" ] || return 1
+    [ "$(readlink "$cfg/hooks")" = "$src/hooks" ] || return 1
+    [ -L "$cfg/statusline.sh" ] || return 1
+    # settings.json must stay a real file: Claude Code rewrites it in place.
+    [ -f "$cfg/settings.json" ] || return 1
+    [ -L "$cfg/settings.json" ] && return 1
+    cmp -s "$cfg/settings.json" "$src/settings.json"
+}
+
+test_install_merge_drops_removed_hook_events() {
+    src="$TMP_ROOT/merge-src"
+    cfg="$TMP_ROOT/merge-cfg"
+    make_src_fixture "$src"
+    mkdir -p "$cfg"
+    printf '#!/bin/sh\nexit 0\n' > "$src/check.sh"
+    # A stale event pointing at a script the repo no longer ships, plus a
+    # machine-local key that must survive.
+    jq '.hooks.UserPromptSubmit = [{"matcher":"*","hooks":[{"type":"command","command":"gone.sh"}]}]
+        | .localOnlyKey = "keep me"' \
+        "$src/settings.json" > "$cfg/settings.json"
+    CLAUDE_CONFIG_DIR="$cfg" sh "$src/install.sh" --yes --no-deps >/dev/null 2>&1 || return 1
+    jq -e '(.hooks | has("UserPromptSubmit") | not) and .localOnlyKey == "keep me"' \
+        "$cfg/settings.json" >/dev/null
+}
+
+test_install_update_requires_upstream() {
+    src="$TMP_ROOT/noupstream-src"
+    cfg="$TMP_ROOT/noupstream-cfg"
+    make_src_fixture "$src"
+    mkdir -p "$cfg"
+    output=$(CLAUDE_CONFIG_DIR="$cfg" sh "$src/install.sh" --update --yes --no-deps 2>&1)
+    status=$?
+    [ "$status" -ne 0 ] && printf '%s\n' "$output" | grep -q 'no upstream branch'
 }
 
 test_ecc_config_dir_and_project_safe_sessions() {
@@ -528,7 +592,8 @@ run_test 'AWS access-key families are rejected' test_aws_token_families
 run_test 'binary-classified staged secrets are rejected' test_binary_staged_secret
 run_test 'Git scanner errors fail closed' test_scanner_error_fails_closed
 run_test 'RTK rewrites without approving' test_rtk_does_not_approve
-run_test 'output policy requires fresh evidence for status claims' test_output_policy_requires_evidence
+run_test 'configured output style ships with the config' test_output_style_file_is_present
+run_test 'checker rejects a missing output style file' test_checker_rejects_missing_output_style
 run_test 'settings commands use the portable config expression' test_settings_use_portable_paths
 run_test 'checker rejects nonportable command paths' test_checker_rejects_nonportable_path
 run_test 'checker rejects unsafe relative paths' test_checker_rejects_unsafe_relative_paths
@@ -543,6 +608,10 @@ run_test 'statusline plugin lookup honors CLAUDE_CONFIG_DIR' test_statusline_plu
 run_test 'template prompt falls back to HOME/.claude' test_template_path_fallback
 run_test 'template prompt honors CLAUDE_CONFIG_DIR' test_template_path_override
 run_test 'installer propagates post-install check failures' test_install_propagates_check_failure
+run_test 'installer refuses the legacy in-place layout' test_install_refuses_in_place_layout
+run_test 'installer symlinks assets and copies settings.json' test_install_symlinks_assets_but_copies_settings
+run_test 'installer --update requires an upstream branch' test_install_update_requires_upstream
+run_test 'settings merge drops hook events the repo removed' test_install_merge_drops_removed_hook_events
 run_test 'ECC sessions use config-local project-safe metadata' test_ecc_config_dir_and_project_safe_sessions
 run_test 'legacy ECC summaries are ignored' test_ecc_legacy_summary_is_ignored
 run_test 'compact counters are config-local' test_ecc_counter_is_config_local

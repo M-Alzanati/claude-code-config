@@ -39,14 +39,21 @@ jobs:
           --cov=shadcn_add --cov=tailwind_config_gen
           --cov-report=term-missing --cov-fail-under=80
 
-      - name: Validate config
-        # check.sh resolves its own root from CLAUDE_CONFIG_DIR, so it runs
-        # against the checkout instead of a real ~/.claude.
+      - name: Validate the checkout in place
+        # check.sh takes its config root from CLAUDE_CONFIG_DIR, so this runs
+        # against the checkout without deploying anything.
         env:
           CLAUDE_CONFIG_DIR: ${{ github.workspace }}
         run: ./check.sh
 
       - name: Installer dry-run
         env:
-          CLAUDE_CONFIG_DIR: ${{ github.workspace }}
+          CLAUDE_CONFIG_DIR: ${{ runner.temp }}/claude
         run: sh install.sh --dry-run --no-deps
+
+      - name: Install into a scratch config dir
+        # Exercises the real deployment: symlinks into a separate directory,
+        # then install.sh runs check.sh against it.
+        env:
+          CLAUDE_CONFIG_DIR: ${{ runner.temp }}/claude
+        run: sh install.sh --yes --no-deps
