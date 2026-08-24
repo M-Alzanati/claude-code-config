@@ -6,6 +6,25 @@ One versioned Claude Code setup for a new machine: settings, hooks, output
 style, statusline, and a small set of shared instructions. Clone it anywhere;
 the installer deploys it into `~/.claude`.
 
+## Requirements
+
+Linux and macOS, both exercised in CI on every push. On Windows, use WSL —
+that is Linux and works unchanged. Native Windows is **not** supported:
+deployment is built on `ln -s`, which needs Developer Mode or an elevated
+shell and which Git Bash silently turns into a copy unless
+`MSYS=winsymlinks:nativestrict` is set. A silent copy is the bad case — the
+install looks fine, then `git pull` quietly stops updating anything. The hook
+commands in `settings.json` also use POSIX parameter expansion
+(`${CLAUDE_CONFIG_DIR:-$HOME/.claude}`), which cmd.exe and PowerShell do not
+expand.
+
+| Tool | Needed for |
+| --- | --- |
+| `git`, `jq` | the installer refuses to run without them |
+| `node` | the four `hooks/ecc/*.js` hooks; `check.sh` fails without it |
+| `rtk` | optional — the Bash rewrite hook no-ops when absent |
+| `claude` | optional — only to auto-install the declared plugins |
+
 ## Install
 
 Clone this repository anywhere you keep source, then run the installer. It
@@ -19,9 +38,9 @@ cd ~/src/claude-code-config
 
 Restart Claude Code when the installer finishes.
 
-The installer needs `git` and `jq`. It backs up anything it displaces, keeps
-machine-local settings, installs optional dependencies only with confirmation,
-and runs the validation check before it succeeds. Re-running it is safe.
+It backs up anything it displaces, keeps machine-local settings, installs
+optional dependencies only with confirmation, and runs the validation check
+before it succeeds. Re-running it is safe.
 
 Useful flags:
 
