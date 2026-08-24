@@ -259,7 +259,9 @@ test_shasum_fallback() {
     make_config_fixture "$fixture"
     bin="$fixture/minimal-bin"
     mkdir -p "$bin"
-    for tool in awk basename cat git hostname jq ls mktemp rm rmdir sed sh shasum sort tail whoami; do
+    # node is in the list because settings.json declares node hooks and check.sh
+    # parses them; this fixture is about shasum, not about a machine without node.
+    for tool in awk basename cat git hostname jq ls mktemp node rm rmdir sed sh shasum sort tail whoami; do
         ln -s "$(command -v "$tool")" "$bin/$tool"
     done
     output=$(PATH="$bin" CLAUDE_CONFIG_DIR="$fixture" "$fixture/check.sh" 2>&1)
@@ -476,6 +478,36 @@ test_install_merge_replaces_managed_blocks() {
            and .localScalar == "keep"' "$cfg/settings.json" >/dev/null
 }
 
+test_checker_rejects_unparseable_hooks() {
+    for broken in 'hooks/ecc/session-start.js:const x = {{{' 'hooks/suggest-claude-md.sh:if [ then fi done'; do
+        rel=${broken%%:*}
+        junk=${broken#*:}
+        fixture="$TMP_ROOT/unparseable-$(printf '%s' "$rel" | tr / -)"
+        make_config_fixture "$fixture"
+        printf '%s\n' "$junk" >> "$fixture/$rel"
+        output=$(CLAUDE_CONFIG_DIR="$fixture" "$fixture/check.sh" 2>&1)
+        status=$?
+        [ "$status" -ne 0 ] || return 1
+        printf '%s\n' "$output" | grep -q "FAIL  parses: $rel" || return 1
+    done
+    return 0
+}
+
+test_checker_detects_symlink_drift() {
+    src="$TMP_ROOT/drift-src"
+    other="$TMP_ROOT/drift-other"
+    cfg="$TMP_ROOT/drift-cfg"
+    make_config_fixture "$src"
+    mkdir -p "$other/hooks" "$cfg"
+    # A second checkout on the same machine; ~/.claude is wired to the wrong one.
+    ln -s "$other/hooks" "$cfg/hooks"
+    cp "$src/settings.json" "$cfg/settings.json"
+    output=$(CLAUDE_CONFIG_DIR="$cfg" "$src/check.sh" 2>&1)
+    status=$?
+    [ "$status" -ne 0 ] &&
+        printf '%s\n' "$output" | grep -q 'FAIL  managed symlinks point at this checkout'
+}
+
 test_install_update_requires_upstream() {
     src="$TMP_ROOT/noupstream-src"
     cfg="$TMP_ROOT/noupstream-cfg"
@@ -686,6 +718,8 @@ run_test 'settings merge drops hook events the repo removed' test_install_merge_
 run_test 'installer sweeps legacy in-place repo files' test_install_sweeps_legacy_repo_files
 run_test 'RTK hook skips shapes rtk mistranslates' test_rtk_skips_shapes_it_mistranslates
 run_test 'settings merge replaces repo-managed blocks' test_install_merge_replaces_managed_blocks
+run_test 'checker rejects hooks that do not parse' test_checker_rejects_unparseable_hooks
+run_test 'checker detects symlinks into another checkout' test_checker_detects_symlink_drift
 run_test 'ECC sessions use config-local project-safe metadata' test_ecc_config_dir_and_project_safe_sessions
 run_test 'legacy ECC summaries are ignored' test_ecc_legacy_summary_is_ignored
 run_test 'compact counters are config-local' test_ecc_counter_is_config_local

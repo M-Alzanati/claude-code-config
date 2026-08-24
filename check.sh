@@ -47,7 +47,28 @@ elif jq -r '(.hooks | to_entries[] | .value[] | .hooks[] | .command), .statusLin
                         ;;
                     *)
                         chk 0 "safe config path: $path"
-                        [ -f "$CFG/$relative" ]; chk $? "command exists: $path"
+                        if [ -f "$CFG/$relative" ]; then
+                            chk 0 "command exists: $path"
+                            # Existing is not the same as working. A syntax error
+                            # in a node hook otherwise ships green and breaks
+                            # every session start, compact and stop.
+                            case "$relative" in
+                                *.js)
+                                    if command -v node >/dev/null 2>&1; then
+                                        node --check "$CFG/$relative" >/dev/null 2>&1
+                                        chk $? "parses: $relative"
+                                    else
+                                        chk 1 "node available to run: $relative"
+                                    fi
+                                    ;;
+                                *.sh)
+                                    sh -n "$CFG/$relative" 2>/dev/null
+                                    chk $? "parses: $relative"
+                                    ;;
+                            esac
+                        else
+                            chk 1 "command exists: $path"
+                        fi
                         ;;
                 esac
                 ;;
@@ -83,6 +104,21 @@ case "$style" in
     *) [ -f "output-styles/$style.md" ]; chk $? "output style file exists: $style" ;;
 esac
 echo '{"cwd":"/"}' | ./hooks/suggest-claude-md.sh >/dev/null 2>&1; chk $? "suggest-claude-md.sh runs"
+
+# A symlink named after something in the checkout must point at *this* checkout.
+# Re-clone the repository elsewhere and install from there, and the old links
+# keep resolving happily against the stale copy while every check above passes.
+drift=0
+for dest in "$CFG"/* "$CFG"/.[!.]* "$CFG"/skills/*; do
+    [ -L "$dest" ] || continue
+    rel=${dest#"$CFG"/}
+    [ -e "$SRC/$rel" ] || continue
+    [ "$(readlink "$dest")" = "$SRC/$rel" ] || {
+        drift=1
+        printf '        %s -> %s\n' "$rel" "$(readlink "$dest")"
+    }
+done
+[ "$drift" = 0 ]; chk $? "managed symlinks point at this checkout"
 
 # Repository hygiene, checked against the checkout rather than ~/.claude: the
 # ignore rules that keep credentials and transcripts out must still hold.

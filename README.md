@@ -83,11 +83,16 @@ cd ~/src/claude-code-config
 ./check.sh
 ```
 
-It checks the JSON, hook paths, script startup, the configured output style,
-ignored sensitive files, the RTK hook checksum, and token-like material in the
-Git index. Config checks run against `~/.claude`; the ignore rules and secret
-scan run against the checkout. It also runs from `.githooks/pre-commit`, so a
-broken `settings.json` cannot be committed.
+It checks the JSON, hook paths, the configured output style, ignored sensitive
+files, the RTK hook checksum, and token-like material in the Git index. Every
+hook is parsed — `node --check` for the `.js` ones, `sh -n` for the shell ones —
+so a syntax error cannot ship green and break session start. It also confirms
+each managed symlink in `~/.claude` points at *this* checkout, which is what
+catches a second clone silently serving the config.
+
+Config checks run against `~/.claude`; the ignore rules and secret scan run
+against the checkout. It also runs from `.githooks/pre-commit`, so a broken
+`settings.json` cannot be committed.
 
 Two further suites run in CI on Linux and macOS, and are worth running by hand
 before a change to the installer or the hooks:
