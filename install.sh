@@ -112,6 +112,16 @@ link() {
 run mkdir -p "$CFG"
 for rel in $LINKS; do link "$rel"; done
 
+# The legacy in-place layout checked the whole repository out into $CFG. These
+# paths are repository infrastructure, never configuration Claude Code reads,
+# so a migrated install would keep serving stale copies of them forever.
+LEGACY=".github .githooks .gitignore LICENSE README.md install.sh"
+for rel in $LEGACY; do
+    [ -L "$CFG/$rel" ] && continue
+    [ -e "$CFG/$rel" ] || continue
+    backup "$CFG/$rel"
+done
+
 if [ "$DRY" = 1 ]; then
     say "  would write settings.json"
 elif [ -f "$CFG/settings.json" ] && [ ! -L "$CFG/settings.json" ]; then

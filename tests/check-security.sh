@@ -405,6 +405,28 @@ test_install_merge_drops_removed_hook_events() {
         "$cfg/settings.json" >/dev/null
 }
 
+test_install_sweeps_legacy_repo_files() {
+    src="$TMP_ROOT/legacy-src"
+    cfg="$TMP_ROOT/legacy-cfg"
+    make_src_fixture "$src"
+    mkdir -p "$cfg/.github/workflows"
+    printf '#!/bin/sh\nexit 0\n' > "$src/check.sh"
+    # What the old in-place layout left sitting in ~/.claude.
+    printf 'stale\n' > "$cfg/README.md"
+    printf 'stale\n' > "$cfg/install.sh"
+    printf 'stale\n' > "$cfg/LICENSE"
+    printf 'stale\n' > "$cfg/.gitignore"
+    printf 'stale\n' > "$cfg/.github/workflows/check.yml"
+    printf 'mine\n' > "$cfg/settings.local.json"
+    CLAUDE_CONFIG_DIR="$cfg" sh "$src/install.sh" --yes --no-deps >/dev/null 2>&1 || return 1
+    for stale in README.md install.sh LICENSE .gitignore .github; do
+        [ -e "$cfg/$stale" ] && return 1
+    done
+    # Swept, not deleted, and unrelated machine-local files stay put.
+    [ -f "$cfg/backups/"*"/README.md" ] || return 1
+    [ -f "$cfg/settings.local.json" ]
+}
+
 test_install_update_requires_upstream() {
     src="$TMP_ROOT/noupstream-src"
     cfg="$TMP_ROOT/noupstream-cfg"
@@ -612,6 +634,7 @@ run_test 'installer refuses the legacy in-place layout' test_install_refuses_in_
 run_test 'installer symlinks assets and copies settings.json' test_install_symlinks_assets_but_copies_settings
 run_test 'installer --update requires an upstream branch' test_install_update_requires_upstream
 run_test 'settings merge drops hook events the repo removed' test_install_merge_drops_removed_hook_events
+run_test 'installer sweeps legacy in-place repo files' test_install_sweeps_legacy_repo_files
 run_test 'ECC sessions use config-local project-safe metadata' test_ecc_config_dir_and_project_safe_sessions
 run_test 'legacy ECC summaries are ignored' test_ecc_legacy_summary_is_ignored
 run_test 'compact counters are config-local' test_ecc_counter_is_config_local

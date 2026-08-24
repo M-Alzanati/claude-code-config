@@ -63,6 +63,10 @@ the merge; the repository wins on shared ones.
 
 Deleting the checkout breaks the symlinks, so keep it somewhere permanent.
 
+`~/.claude` holds only live configuration. Repository infrastructure —
+`README.md`, `LICENSE`, `install.sh`, `.gitignore`, `.github/`, `.githooks/` —
+is swept into `backups/` if an earlier in-place install left copies there.
+
 ## Verify
 
 ```sh
@@ -98,6 +102,8 @@ installer, hooks and validator all honor it.
 - The vendored `hooks/ecc/` code does not update itself. Update it deliberately.
 - Earlier versions made `~/.claude` itself the repository. If yours still has a
   `~/.claude/.git`, the installer says so; remove it once the new install works.
+  Stale repository files left by that layout are swept into `backups/` on the
+  next install, so read `~/.claude/README.md` only if it is a symlink.
 
 ## License
 
