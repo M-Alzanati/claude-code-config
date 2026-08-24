@@ -4,15 +4,22 @@
 # Two roots: CFG is the deployed ~/.claude, SRC is the checkout it links back
 # to. They are the same directory only in the legacy in-place layout.
 resolve_dir() {
+    # Parameter expansion rather than dirname: this runs before anything has
+    # established that external tools are on PATH.
     p=$1
     while [ -L "$p" ]; do
         t=$(readlink "$p")
         case "$t" in
             /*) p=$t ;;
-            *) p=$(dirname "$p")/$t ;;
+            */*) p=${p%/*}/$t ;;
+            *) case "$p" in */*) p=${p%/*}/$t ;; *) p=$t ;; esac ;;
         esac
     done
-    (cd "$(dirname "$p")" && pwd)
+    case "$p" in
+        */*) d=${p%/*} ;;
+        *) d=. ;;
+    esac
+    (cd "$d" && pwd)
 }
 SRC=$(resolve_dir "$0")
 CFG="${CLAUDE_CONFIG_DIR:-$HOME/.claude}"
@@ -62,8 +69,21 @@ elif jq -r '(.hooks | to_entries[] | .value[] | .hooks[] | .command), .statusLin
                                     fi
                                     ;;
                                 *.sh)
-                                    sh -n "$CFG/$relative" 2>/dev/null
-                                    chk $? "parses: $relative"
+                                    # By shebang, not by extension: rtk-rewrite.sh
+                                    # is bash and `sh -n` is dash on most Linux,
+                                    # which rejects [[ ]] and reports a false
+                                    # syntax error.
+                                    IFS= read -r shebang < "$CFG/$relative" || shebang=
+                                    case "$shebang" in
+                                        *bash*) interp=bash ;;
+                                        *) interp=sh ;;
+                                    esac
+                                    if command -v "$interp" >/dev/null 2>&1; then
+                                        "$interp" -n "$CFG/$relative" 2>/dev/null
+                                        chk $? "parses: $relative"
+                                    else
+                                        chk 1 "$interp available to run: $relative"
+                                    fi
                                     ;;
                             esac
                         else

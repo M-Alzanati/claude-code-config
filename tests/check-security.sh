@@ -269,7 +269,7 @@ test_shasum_fallback() {
     mkdir -p "$bin"
     # node is in the list because settings.json declares node hooks and check.sh
     # parses them; this fixture is about shasum, not about a machine without node.
-    for tool in awk basename cat git hostname jq ls mktemp node rm rmdir sed sh shasum sort tail whoami; do
+    for tool in awk bash basename cat git hostname jq ls mktemp node readlink rm rmdir sed sh shasum sort tail whoami; do
         resolved=$(command -v "$tool") || { note "not on PATH: $tool"; continue; }
         ln -s "$resolved" "$bin/$tool"
         note "linked $tool -> $resolved"
