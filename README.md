@@ -2,8 +2,9 @@
 
 [![check](https://github.com/M-Alzanati/claude-code-config/actions/workflows/check.yml/badge.svg)](https://github.com/M-Alzanati/claude-code-config/actions/workflows/check.yml)
 
-One versioned Claude Code setup for a new machine: settings, hooks, statusline,
-and a small set of shared instructions.
+One versioned Claude Code setup for a new machine: settings, hooks, output
+style, statusline, and a small set of shared instructions. Clone it anywhere;
+the installer deploys it into `~/.claude`.
 
 ## Install
 
@@ -77,7 +78,19 @@ cd ~/src/claude-code-config
 It checks the JSON, hook paths, script startup, the configured output style,
 ignored sensitive files, the RTK hook checksum, and token-like material in the
 Git index. Config checks run against `~/.claude`; the ignore rules and secret
-scan run against the checkout. The same checks run in CI on Linux and macOS.
+scan run against the checkout. It also runs from `.githooks/pre-commit`, so a
+broken `settings.json` cannot be committed.
+
+Two further suites run in CI on Linux and macOS, and are worth running by hand
+before a change to the installer or the hooks:
+
+```sh
+sh tests/check-security.sh   # secret scanning, path safety, installer behaviour
+python -m pytest skills/ui-styling/scripts/tests
+```
+
+`tests/check-security.sh` takes several minutes: it builds throwaway git
+repositories and config directories for each case rather than mocking them.
 
 ## What this config changes
 
@@ -102,8 +115,9 @@ installer, hooks and validator all honor it.
 - The vendored `hooks/ecc/` code does not update itself. Update it deliberately.
 - Earlier versions made `~/.claude` itself the repository. If yours still has a
   `~/.claude/.git`, the installer says so; remove it once the new install works.
-  Stale repository files left by that layout are swept into `backups/` on the
-  next install, so read `~/.claude/README.md` only if it is a symlink.
+  Files that layout left behind are swept into `backups/` on the next install,
+  so `~/.claude/README.md` and `~/.claude/install.sh` no longer exist — read
+  them in the checkout, which is the only copy that tracks the current state.
 
 ## License
 
