@@ -8,13 +8,21 @@ trap 'rm -rf "$TMP_ROOT"' 0 HUP INT TERM
 passed=0
 failed=0
 
+# Tests capture the output they assert on, so a failure otherwise says only
+# which test failed and nothing about why. `note` records detail that is
+# printed, indented, when that test fails and discarded when it passes.
+note() { [ -n "${DIAG:-}" ] && printf '%s\n' "$*" >> "$DIAG"; }
+
 run_test() {
+    DIAG="$TMP_ROOT/diagnostic"
+    : > "$DIAG"
     if "$2"; then
         printf 'ok - %s\n' "$1"
         passed=$((passed + 1))
     else
         printf 'not ok - %s\n' "$1"
         failed=$((failed + 1))
+        [ -s "$DIAG" ] && sed 's/^/    /' "$DIAG"
     fi
 }
 
@@ -262,10 +270,14 @@ test_shasum_fallback() {
     # node is in the list because settings.json declares node hooks and check.sh
     # parses them; this fixture is about shasum, not about a machine without node.
     for tool in awk basename cat git hostname jq ls mktemp node rm rmdir sed sh shasum sort tail whoami; do
-        ln -s "$(command -v "$tool")" "$bin/$tool"
+        resolved=$(command -v "$tool") || { note "not on PATH: $tool"; continue; }
+        ln -s "$resolved" "$bin/$tool"
+        note "linked $tool -> $resolved"
     done
     output=$(PATH="$bin" CLAUDE_CONFIG_DIR="$fixture" "$fixture/check.sh" 2>&1)
     status=$?
+    note "check.sh exit=$status"
+    note "$output"
     [ "$status" -eq 0 ] && printf '%s\n' "$output" | grep -q 'ok    rtk-rewrite.sh matches its recorded checksum'
 }
 
