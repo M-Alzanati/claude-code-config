@@ -1,6 +1,7 @@
-# Deny by default. This tree also holds OAuth credentials, full conversation
-# transcripts (projects/), prompt history, and a 1.3G plugin cache — none of
-# which belong in a repo. Add new config explicitly below.
+# Deny by default; add new config explicitly below. The checkout no longer
+# lives in ~/.claude, but the rule stays: it keeps test artifacts, editor
+# droppings and anything copied in from a real config directory — credentials,
+# transcripts, prompt history — from being committed by accident.
 *
 
 !.gitignore
@@ -28,12 +29,6 @@ skills/**
 !LICENSE
 !.github/
 !.github/**
-!docs/
-!docs/superpowers/
-!docs/superpowers/specs/
-!docs/superpowers/specs/**
-!docs/superpowers/plans/
-!docs/superpowers/plans/**
 !tests/
 !tests/check-security.sh
 !output-styles/
