@@ -125,13 +125,19 @@ done
 if [ "$DRY" = 1 ]; then
     say "  would write settings.json"
 elif [ -f "$CFG/settings.json" ] && [ ! -L "$CFG/settings.json" ]; then
-    # Repo wins on shared keys; machine-local keys survive. `.hooks` is taken
-    # from the repo verbatim rather than deep-merged: `*` can add and override
-    # but never delete, so a hook event dropped upstream would otherwise linger
-    # here forever, still pointing at a script that no longer exists.
+    # Repo wins on shared keys; machine-local keys survive. The blocks below
+    # are taken from the repo verbatim rather than deep-merged: `*` can add and
+    # override but never delete, so anything dropped upstream would otherwise
+    # linger here forever - a hook still pointing at a deleted script, a plugin
+    # you removed months ago. These four are repository-managed; declare a
+    # plugin here, not with `claude plugin install`, or the next update drops it.
     mkdir -p "$BAK"
     cp "$CFG/settings.json" "$BAK/settings.json"
-    jq -s '. as [$local, $repo] | ($local * $repo) | .hooks = $repo.hooks' \
+    jq -s '. as [$local, $repo] | ($local * $repo)
+           | .hooks = $repo.hooks
+           | .statusLine = $repo.statusLine
+           | .enabledPlugins = $repo.enabledPlugins
+           | .extraKnownMarketplaces = $repo.extraKnownMarketplaces' \
         "$BAK/settings.json" "$SRC/settings.json" > "$CFG/.settings.merged"
     mv "$CFG/.settings.merged" "$CFG/settings.json"
     say "  merge settings.json (repo wins on conflicts, local extras kept)"

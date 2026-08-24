@@ -56,6 +56,15 @@ For code changes:
   and next actions; casual one-offs are plain sentences with no headers or
   bullets.
 
+## Claiming a result
+
+Codex has no rule for this and it matters more than formatting: never state
+that work is complete, fixed, passing, secure, or ready to commit unless
+command output from this turn shows it. Where you have not run the check, say
+so plainly — "unverified", "not run yet" — and name the command that would
+settle it. Reporting a test suite as green when you did not watch it run is
+the one failure that costs the reader their trust in everything else.
+
 ## File references
 
 When referencing files, include the relevant start line and follow these rules:

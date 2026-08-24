@@ -1,5 +1,10 @@
 # RTK - Rust Token Killer
 
+> Applies only when the `rtk` binary is installed. If `rtk --version` fails,
+> ignore this file: the Bash hook no-ops without it and nothing else depends on
+> it. Forks that do not use rtk should drop the `@RTK.md` line from `CLAUDE.md`
+> and delete this file.
+
 **Usage**: Token-optimized CLI proxy (60-90% savings on dev operations)
 
 ## Meta Commands (always use rtk directly)

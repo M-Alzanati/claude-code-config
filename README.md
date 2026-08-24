@@ -49,6 +49,14 @@ Claude Code rewrites it itself (`/output-style`, plugin installs) and an atomic
 write would silently replace a symlink with a regular file. Your keys survive
 the merge; the repository wins on shared ones.
 
+Four blocks are repository-managed and replaced outright rather than merged:
+`hooks`, `statusLine`, `enabledPlugins` and `extraKnownMarketplaces`. Merging
+can add and override but never delete, so anything you drop upstream would
+otherwise live on in every existing install. The practical consequence: declare
+a plugin in this repository's `settings.json`, not with `claude plugin install`,
+or the next update will remove it again. Everything else — `env`, `model`,
+`theme`, your own keys — still merges.
+
 ## How it is laid out
 
 | Path in `~/.claude` | Kind | Source |
@@ -102,7 +110,8 @@ repositories and config directories for each case rather than mocking them.
 - `hooks/ecc/` stores bounded, project-specific session metadata and suggests
   compaction when tool use grows large.
 - `statusline.sh` shows the current project and context usage.
-- `CLAUDE.md` and `PRACTICES.md` contain the shared working rules.
+- `CLAUDE.md` and `PRACTICES.md` contain the shared working rules, including
+  the voice to use in pull requests, review comments and commit messages.
 
 Set `CLAUDE_CONFIG_DIR` to deploy somewhere other than `~/.claude`; the
 installer, hooks and validator all honor it.
@@ -110,8 +119,13 @@ installer, hooks and validator all honor it.
 ## Before you rely on it
 
 - Read `CLAUDE.md` and `PRACTICES.md`; they are preferences, not universal rules.
-- `rtk` is optional but needed for the Bash rewrite hook. Verify the binary you
-  install is the intended tool before enabling it.
+- `rtk` is optional. Without it the Bash hook no-ops; `RTK.md` says so at the
+  top, and a fork that does not use rtk should drop the `@RTK.md` import from
+  `CLAUDE.md`. Verify the binary you install is the intended tool — a different
+  project publishes the same command name.
+- `hooks/rtk-rewrite.sh` skips a few command shapes rtk mistranslates into
+  commands it then rejects (`cat` with several files, `head`/`tail -N`, `find`
+  with `-exec`). Remove a guard once the matching rtk registry entry is fixed.
 - The vendored `hooks/ecc/` code does not update itself. Update it deliberately.
 - Earlier versions made `~/.claude` itself the repository. If yours still has a
   `~/.claude/.git`, the installer says so; remove it once the new install works.

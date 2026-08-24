@@ -427,6 +427,55 @@ test_install_sweeps_legacy_repo_files() {
     [ -f "$cfg/settings.local.json" ]
 }
 
+test_rtk_skips_shapes_it_mistranslates() {
+    mkdir -p "$TMP_ROOT/rtk-skip-bin"
+    # A stand-in that rewrites anything it is handed, so a rewrite here proves
+    # the hook consulted rtk rather than skipping.
+    cat > "$TMP_ROOT/rtk-skip-bin/rtk" <<'EOF'
+#!/bin/sh
+case "$1" in
+    --version) printf '%s\n' 'rtk 0.23.0' ;;
+    rewrite) printf 'rtk %s\n' "$2" ;;
+    *) exit 1 ;;
+esac
+EOF
+    chmod +x "$TMP_ROOT/rtk-skip-bin/rtk"
+    # rtk turns each of these into a command it then rejects.
+    for cmd in 'cat a.txt b.txt' 'tail -3 f.log' 'head -5 f.log' 'find . -name x -exec rm {} ;'; do
+        out=$(jq -n --arg c "$cmd" '{tool_input:{command:$c}}' |
+            PATH="$TMP_ROOT/rtk-skip-bin:$PATH" "$ROOT/hooks/rtk-rewrite.sh") || return 1
+        [ -n "$out" ] && return 1
+    done
+    # Shapes rtk handles correctly must still be rewritten.
+    for cmd in 'cat one.txt' 'git status'; do
+        out=$(jq -n --arg c "$cmd" '{tool_input:{command:$c}}' |
+            PATH="$TMP_ROOT/rtk-skip-bin:$PATH" "$ROOT/hooks/rtk-rewrite.sh") || return 1
+        printf '%s\n' "$out" | jq -e --arg c "rtk $cmd" \
+            '.hookSpecificOutput.updatedInput.command == $c' >/dev/null || return 1
+    done
+    return 0
+}
+
+test_install_merge_replaces_managed_blocks() {
+    src="$TMP_ROOT/managed-src"
+    cfg="$TMP_ROOT/managed-cfg"
+    make_src_fixture "$src"
+    mkdir -p "$cfg"
+    printf '#!/bin/sh\nexit 0\n' > "$src/check.sh"
+    # A plugin and marketplace the repo no longer declares, plus machine-local
+    # keys that must survive the merge.
+    jq '.enabledPlugins = {"gone@old": true}
+        | .extraKnownMarketplaces = {"old": {"source": {"source": "github", "repo": "x/y"}}}
+        | .env.LOCAL_ONLY = "1"
+        | .localScalar = "keep"' \
+        "$src/settings.json" > "$cfg/settings.json"
+    CLAUDE_CONFIG_DIR="$cfg" sh "$src/install.sh" --yes --no-deps >/dev/null 2>&1 || return 1
+    jq -e '(.enabledPlugins | has("gone@old") | not)
+           and (.extraKnownMarketplaces | has("old") | not)
+           and .env.LOCAL_ONLY == "1"
+           and .localScalar == "keep"' "$cfg/settings.json" >/dev/null
+}
+
 test_install_update_requires_upstream() {
     src="$TMP_ROOT/noupstream-src"
     cfg="$TMP_ROOT/noupstream-cfg"
@@ -635,6 +684,8 @@ run_test 'installer symlinks assets and copies settings.json' test_install_symli
 run_test 'installer --update requires an upstream branch' test_install_update_requires_upstream
 run_test 'settings merge drops hook events the repo removed' test_install_merge_drops_removed_hook_events
 run_test 'installer sweeps legacy in-place repo files' test_install_sweeps_legacy_repo_files
+run_test 'RTK hook skips shapes rtk mistranslates' test_rtk_skips_shapes_it_mistranslates
+run_test 'settings merge replaces repo-managed blocks' test_install_merge_replaces_managed_blocks
 run_test 'ECC sessions use config-local project-safe metadata' test_ecc_config_dir_and_project_safe_sessions
 run_test 'legacy ECC summaries are ignored' test_ecc_legacy_summary_is_ignored
 run_test 'compact counters are config-local' test_ecc_counter_is_config_local

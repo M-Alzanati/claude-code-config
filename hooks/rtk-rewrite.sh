@@ -35,12 +35,43 @@ if [ -z "$CMD" ]; then
   exit 0
 fi
 
-# Delegate all rewrite logic to the Rust binary.
+# Local deviation from the "all logic lives in rtk rewrite" rule above: rtk
+# translates these shapes into commands it then rejects, so a working call
+# becomes an error the caller has to notice and retry. Skipping is cheaper.
+#   cat a b     -> rtk read a b     (rtk read accepts a single file)
+#   tail -3 f   -> rtk read -3 f    (numeric shorthand is not an rtk flag)
+#   find -exec  -> rtk find -exec   (rtk find has no -exec/-not/-prune)
+# Drop a rule here once the corresponding rtk registry entry handles the shape.
+skip_rewrite() {
+  local cmd=$1 w n=0
+  if [[ $cmd == find\ * ]]; then
+    [[ $cmd == *" -exec "* || $cmd == *" -not "* || $cmd == *" -prune "* ]] && return 0
+  fi
+  [[ $cmd =~ ^(head|tail)[[:space:]]+-[0-9] ]] && return 0
+  if [[ $cmd == cat\ * ]]; then
+    local -a words
+    read -ra words <<<"$cmd"
+    for w in "${words[@]:1}"; do [[ $w == -* ]] || n=$((n + 1)); done
+    [ "$n" -gt 1 ] && return 0
+  fi
+  return 1
+}
+
+if skip_rewrite "$CMD"; then
+  exit 0
+fi
+
+# Delegate all remaining rewrite logic to the Rust binary.
 # rtk rewrite exits 1 when there's no rewrite — hook passes through silently.
 REWRITTEN=$(rtk rewrite "$CMD" 2>/dev/null) || exit 0
 
 # No change — nothing to do.
 if [ "$CMD" = "$REWRITTEN" ]; then
+  exit 0
+fi
+
+# Anything that is not an rtk invocation is not a rewrite we understand.
+if [[ $REWRITTEN != rtk\ * ]]; then
   exit 0
 fi
 
