@@ -1,5 +1,5 @@
 #!/bin/sh
-# Claude Code statusLine: [user@host cwd][PONYTAIL] 222k/1.0M 22%
+# Claude Code statusLine: [user@host cwd][PONYTAIL] xhigh 222k/1.0M 22%
 # The harness sends context_window ready-made — no transcript parsing needed.
 input=$(cat)
 cwd=$(printf '%s' "$input" | jq -r '.cwd // ""')
@@ -12,6 +12,10 @@ P="${CLAUDE_CONFIG_DIR:-$HOME/.claude}/plugins"
 pt=$(ls -td "$P/cache/ponytail/ponytail/"*/hooks/ponytail-statusline.sh 2>/dev/null | head -1)
 [ -f "$pt" ] || pt="$P/marketplaces/ponytail/hooks/ponytail-statusline.sh"
 [ -f "$pt" ] && sh "$pt" 2>/dev/null
+
+# Absent when the model has no effort control.
+effort=$(printf '%s' "$input" | jq -r '.effort.level // empty' 2>/dev/null)
+[ -n "$effort" ] && printf ' %s' "$effort"
 
 set -- $(printf '%s' "$input" | jq -r '
     .context_window | select(.) |
